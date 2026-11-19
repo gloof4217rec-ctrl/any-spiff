@@ -1,57 +1,64 @@
-![PAMPLEJUCE](assets/images/pamplejuce.png)
-[![](https://github.com/sudara/pamplejuce/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/sudara/pamplejuce/actions)
+# Transient Sculptor
 
-Pamplejuce is a ~~template~~ lifestyle for creating and building JUCE plugins in 2026.
+An adaptive, frequency-dependent transient shaper for macOS, built with
+[JUCE](https://juce.com) on top of the [Pamplejuce](https://github.com/sudara/pamplejuce) template.
 
-Out-of-the-box, it:
+Transient Sculptor is inspired by [oeksound spiff](https://oeksound.com/manuals/spiff/):
+instead of compressing the whole signal, it detects transient material and applies
+gain reduction (or boost) only to the frequency ranges that contain it, leaving the
+sustained part of the sound intact. Originally aimed at vocal cleanup — clicks, mouth
+noises, harsh consonants — it works on drums, acoustic instruments and full mixes too.
 
-1. Runs C++23
-2. Uses JUCE 9.x as a git submodule (tracking develop).
-3. Uses CPM for dependency management.
-3. Relies on CMake 3.25 and higher for cross-platform building.
-4. Has [Catch2](https://github.com/catchorg/Catch2) v3.8.1 for the test framework and runner.
-5. Includes a `Tests` target and a `Benchmarks` target with examples to get started quickly.
-6. Has [Melatonin Inspector](https://github.com/sudara/melatonin_inspector) installed as a JUCE module to help relieve headaches when building plugin UI.
+## Formats
 
-It also has integration with GitHub Actions, specifically:
+| Format | Platform |
+| --- | --- |
+| AU / AUv3 | macOS |
+| VST3 | macOS |
+| CLAP | macOS |
+| Standalone | macOS |
 
-1. Building and testing cross-platform (linux, macOS, Windows) binaries
-2. Running tests and benchmarks in CI
-3. Running [pluginval](http://github.com/tracktion/pluginval) 1.x against the binaries for plugin validation
-4. Config for [installing Intel IPP](https://www.intel.com/content/www/us/en/developer/tools/oneapi/ipp.html)
-5. [Code signing and notarization on macOS](https://melatonin.dev/blog/how-to-code-sign-and-notarize-macos-audio-plugins-in-ci/)
-6. [Windows code signing via Azure Trusted Signing](https://melatonin.dev/blog/code-signing-on-windows-with-azure-trusted-signing/)
+Target: macOS 10.14+, universal binary (arm64 + x86_64) in CI.
 
-It also contains:
+## Getting started
 
-1. A `.gitignore` for all platforms.
-2. A `.clang-format` file for keeping code tidy.
-3. A `VERSION` file that will propagate through JUCE and your app.
-4. A ton of useful comments and options around the CMake config.
+```bash
+# Fetch JUCE and other submodules (once)
+git submodule update --init --recursive
 
-## How does this all work at a high level?
+# Configure
+cmake -B Builds -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
-Check out the [official Pamplejuce documentation](https://melatonin.dev/manuals/pamplejuce/how-does-this-all-work/).
+# Build
+cmake --build Builds --config Debug
 
-[![Arc - 2024-10-01 51@2x](https://github.com/user-attachments/assets/01d19d2d-fbac-481f-8cec-e9325b2abe57)](https://melatonin.dev/manuals/pamplejuce/how-does-this-all-work/)
+# Test
+ctest --test-dir Builds --verbose --output-on-failure
+```
 
-## Setting up for YOUR project
+Builds are Debug by default for development. Use `-DCMAKE_BUILD_TYPE=Release` (or
+`RelWithDebInfo`) when you need to check CPU usage / audio performance.
 
-This is a template repo!
+## Project layout
 
-That means you can click "[Use this template](https://github.com/sudara/pamplejuce/generate)" here or at the top of the page to get your own copy (not fork) of the repo. Then you can make it private or keep it public, up to you.
+- `source/` — plugin processor and editor
+- `tests/` — Catch2 tests (`ctest` runs them)
+- `benchmarks/` — Catch2 benchmarks
+- `docs/Spiff-Analysis.md` — breakdown of spiff's parameters and behaviour (design reference)
+- `cmake/` — Pamplejuce CMake modules
+- `modules/` — git submodules (melatonin_inspector, clap-juce-extensions)
+- `JUCE/` — JUCE framework (git submodule)
+- `packaging/` — macOS installer resources
 
-Then check out the [documentation](https://melatonin.dev/manuals/pamplejuce/setting-your-project-up/) so you know what to tweak.
+## CI
 
-**Using an AI coding agent?** The included `CLAUDE.md` / `AGENTS.md` has a first-time setup wizard — just ask your agent to set up the project and it will walk you through naming, CI configuration, and code signing.
+`.github/workflows/build_and_test.yml` builds, tests and validates the plugin with
+[pluginval](https://github.com/Tracktion/pluginval) on `macos-14`, then packages an
+unsigned `.pkg`. Code signing/notarization and the Linux/Windows matrix entries are
+commented out until they are needed — see the comments in the workflow and in
+`CLAUDE.md`.
 
-> [!NOTE]
-> Tests will immediately run and fail (go red) until you [set up code signing](https://melatonin.dev/manuals/pamplejuce/getting-started/code-signing/).
+## Status
 
-## Having Issues?
-
-Thanks to everyone who has contributed to the repository. 
-
-This repository covers a _lot_ of ground. JUCE itself has a lot of surface area. It's a group effort to maintain the garden and keep things nice!
-
-If something isn't just working out of the box — *it's probably not just you* — others are running into the problem, too, I promise. Check out [the official docs](https://melatonin.dev/manuals/pamplejuce), then please do [open an issue](https://github.com/sudara/pamplejuce/issues/new)!
+Early development: the template has been personalized, the DSP and UI for the adaptive
+transient shaping are next. See `docs/Spiff-Analysis.md` for the feature plan.

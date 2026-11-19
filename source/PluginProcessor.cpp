@@ -10,12 +10,118 @@ PluginProcessor::PluginProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
-                       )
+                       ),
+       apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    cacheParameterPointers();
 }
 
 PluginProcessor::~PluginProcessor()
 {
+}
+
+//==============================================================================
+juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParameterLayout()
+{
+    using namespace juce;
+
+    constexpr int versionHint = 1;
+    AudioProcessorValueTreeState::ParameterLayout layout;
+
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "mode", versionHint },
+                                                       "Mode",
+                                                       StringArray { "Cut", "Boost" },
+                                                       0));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "depth", versionHint },
+                                                       "Depth",
+                                                       NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+                                                       0.0f,
+                                                       AudioParameterFloatAttributes().withLabel ("%")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "sensitivity", versionHint },
+                                                       "Sensitivity",
+                                                       NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+                                                       50.0f,
+                                                       AudioParameterFloatAttributes().withLabel ("%")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "sharpness", versionHint },
+                                                       "Sharpness",
+                                                       NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+                                                       50.0f,
+                                                       AudioParameterFloatAttributes().withLabel ("%")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "decay", versionHint },
+                                                       "Decay",
+                                                       NormalisableRange<float> (0.0f, 10.0f, 0.01f),
+                                                       0.0f));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "decay_lfhf", versionHint },
+                                                       "Decay LF/HF",
+                                                       NormalisableRange<float> (0.0f, 10.0f, 0.01f),
+                                                       5.0f));
+
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "stereo_mode", versionHint },
+                                                       "Stereo Mode",
+                                                       StringArray { "Left/Right", "Mid/Side" },
+                                                       0));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "stereo_link", versionHint },
+                                                       "Stereo Link",
+                                                       NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+                                                       100.0f,
+                                                       AudioParameterFloatAttributes().withLabel ("%")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "balance", versionHint },
+                                                       "Balance",
+                                                       NormalisableRange<float> (0.0f, 200.0f, 0.1f),
+                                                       100.0f,
+                                                       AudioParameterFloatAttributes().withLabel ("%")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "mix", versionHint },
+                                                       "Mix",
+                                                       NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+                                                       100.0f,
+                                                       AudioParameterFloatAttributes().withLabel ("%")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "trim", versionHint },
+                                                       "Trim",
+                                                       NormalisableRange<float> (-24.0f, 24.0f, 0.1f),
+                                                       0.0f,
+                                                       AudioParameterFloatAttributes().withLabel ("dB")));
+
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "delta", versionHint },
+                                                      "Delta",
+                                                      false));
+
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "bypass", versionHint },
+                                                      "Bypass",
+                                                      false));
+
+    return layout;
+}
+
+void PluginProcessor::cacheParameterPointers()
+{
+    modeParam = apvts.getRawParameterValue ("mode");
+    depthParam = apvts.getRawParameterValue ("depth");
+    sensitivityParam = apvts.getRawParameterValue ("sensitivity");
+    sharpnessParam = apvts.getRawParameterValue ("sharpness");
+    decayParam = apvts.getRawParameterValue ("decay");
+    decayLfHfParam = apvts.getRawParameterValue ("decay_lfhf");
+    stereoModeParam = apvts.getRawParameterValue ("stereo_mode");
+    stereoLinkParam = apvts.getRawParameterValue ("stereo_link");
+    balanceParam = apvts.getRawParameterValue ("balance");
+    mixParam = apvts.getRawParameterValue ("mix");
+    trimParam = apvts.getRawParameterValue ("trim");
+    deltaParam = apvts.getRawParameterValue ("delta");
+    bypassParam = apvts.getRawParameterValue ("bypass");
+
+    jassert (modeParam != nullptr && depthParam != nullptr && sensitivityParam != nullptr
+             && sharpnessParam != nullptr && decayParam != nullptr && decayLfHfParam != nullptr
+             && stereoModeParam != nullptr && stereoLinkParam != nullptr && balanceParam != nullptr
+             && mixParam != nullptr && trimParam != nullptr && deltaParam != nullptr
+             && bypassParam != nullptr);
 }
 
 //==============================================================================
@@ -53,7 +159,8 @@ bool PluginProcessor::isMidiEffect() const
 
 double PluginProcessor::getTailLengthSeconds() const
 {
-    return 0.0;
+    // The STFT only delays the signal, it does not ring beyond that.
+    return getSampleRate() > 0.0 ? (double) transientShaper.getLatencySamples() / getSampleRate() : 0.0;
 }
 
 int PluginProcessor::getNumPrograms()
@@ -87,15 +194,16 @@ void PluginProcessor::changeProgramName (int index, const juce::String& newName)
 //==============================================================================
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
-    juce::ignoreUnused (sampleRate, samplesPerBlock);
+    juce::ignoreUnused (samplesPerBlock);
+
+    transientShaper.prepare (sampleRate);
+    setLatencySamples (transientShaper.getLatencySamples());
 }
 
 void PluginProcessor::releaseResources()
 {
-    // When playback stops, you can use this as an opportunity to free up any
-    // spare memory, etc.
+    // Playback has stopped, so dropping the analysis history here is safe (message thread).
+    transientShaper.reset();
 }
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -126,30 +234,33 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     juce::ignoreUnused (midiMessages);
 
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+
+    const auto totalNumInputChannels  = getTotalNumInputChannels();
+    const auto totalNumOutputChannels = getTotalNumOutputChannels();
 
     // In case we have more outputs than inputs, this code clears any output
     // channels that didn't contain input data, (because these aren't
     // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer (channel);
-        juce::ignoreUnused (channelData);
-        // ..do something to the data...
-    }
+    TransientShaperParameters parameters;
+
+    parameters.boost = modeParam->load() > 0.5f;
+    parameters.depth = depthParam->load() * 0.01f;
+    parameters.sensitivity = sensitivityParam->load() * 0.01f;
+    parameters.sharpness = sharpnessParam->load() * 0.01f;
+    parameters.decay = decayParam->load();
+    parameters.decayLfHf = decayLfHfParam->load() * 0.1f;
+    parameters.midSide = stereoModeParam->load() > 0.5f;
+    parameters.stereoLink = stereoLinkParam->load() * 0.01f;
+    parameters.balance = (balanceParam->load() - 100.0f) * 0.01f;
+    parameters.mix = mixParam->load() * 0.01f;
+    parameters.trimDb = trimParam->load();
+    parameters.delta = deltaParam->load() > 0.5f;
+    parameters.bypass = bypassParam->load() > 0.5f;
+
+    transientShaper.process (buffer, parameters);
 }
 
 //==============================================================================
@@ -166,17 +277,18 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 //==============================================================================
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
-    juce::ignoreUnused (destData);
+    const auto state = apvts.copyState();
+    const std::unique_ptr<juce::XmlElement> xml (state.createXml());
+
+    copyXmlToBinary (*xml, destData);
 }
 
 void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
-    juce::ignoreUnused (data, sizeInBytes);
+    const std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes));
+
+    if (xml != nullptr && xml->hasTagName (apvts.state.getType()))
+        apvts.replaceState (juce::ValueTree::fromXml (*xml));
 }
 
 //==============================================================================

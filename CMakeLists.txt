@@ -13,11 +13,10 @@ include(PamplejuceMacOS)
 # Couple tweaks that IMO should be JUCE defaults
 include(JUCEDefaults)
 
-# Change me!
 # This is the internal name of the project and the name of JUCE's shared code target
 # Note: This cannot have spaces (it may be 2024, but you can't have it all!)
 # Worry not, JUCE's PRODUCT_NAME can have spaces (and is what DAWs display)
-set(PROJECT_NAME "Pamplejuce")
+set(PROJECT_NAME "TransientSculptor")
 
 # Worry not, JUCE's PRODUCT_NAME can have spaces (and is what DAWs will display)
 # You can also just have it be the same thing as PROJECT_NAME
@@ -25,15 +24,18 @@ set(PROJECT_NAME "Pamplejuce")
 #   set(PROJECT_NAME "MyPlugin_v${MAJOR_VERSION}")
 # Doing so enables major versions to show up in IDEs and DAWs as separate plugins
 # allowing you to change parameters and behavior without breaking existing user projects
-set(PRODUCT_NAME "Pamplejuce Demo")
+set(PRODUCT_NAME "Transient Sculptor")
 
-# Change me! Used for the MacOS bundle name and Installers
-set(COMPANY_NAME "Pamplejuce Company")
+# Used for the MacOS bundle name and Installers
+set(COMPANY_NAME "Any Audio Co")
 
-# Change me! Used for the MacOS bundle identifier (and signing)
-set(BUNDLE_ID "com.pamplejuce.pamplejuce")
+# Used for the MacOS bundle identifier (and signing)
+set(BUNDLE_ID "com.anyaudioco.transientsculptor")
 
-# Change me! Set the plugin formats you want built
+# Set the plugin formats you want built.
+# AU and AUv3 only exist on macOS. These are the formats a macOS user expects:
+# AU for Logic/GarageBand, VST3 for Cubase/Studio One/Bitwig/etc, Standalone for testing.
+# CLAP is added by clap_juce_extensions_plugin() below.
 # Valid choices: AAX Unity VST VST3 AU AUv3 Standalone
 set(FORMATS Standalone AU VST3 AUv3)
 
@@ -71,22 +73,19 @@ juce_add_plugin("${PROJECT_NAME}"
     # Icons for the standalone app
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icon.png"
 
-    # Change me!
     COMPANY_NAME "${COMPANY_NAME}"
     BUNDLE_ID "${BUNDLE_ID}"
 
     # On MacOS, plugin is copied to /Users/yourname/Library/Audio/Plug-Ins/
     COPY_PLUGIN_AFTER_BUILD TRUE
 
-    # Change me!
-    # A four-character plugin id
+    # A four-character manufacturer id
     # First character MUST be uppercase for AU formats
-    PLUGIN_MANUFACTURER_CODE Pamp
+    PLUGIN_MANUFACTURER_CODE AnyA
 
-    # Change me!
     # A unique four-character plugin id
     # Note: this must have at least one upper-case character
-    PLUGIN_CODE P001
+    PLUGIN_CODE TSc1
     FORMATS "${FORMATS}"
 
     # The name of your final executable
@@ -115,6 +114,10 @@ pamplejuce_shared_code_defaults()
 file(GLOB_RECURSE SourceFiles CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/source/*.h")
 target_sources(SharedCode INTERFACE ${SourceFiles})
 
+# Let every consumer (plugin targets, Tests, Benchmarks) include headers relative
+# to the source root, e.g. #include "dsp/AdaptiveTransientShaper.h"
+target_include_directories(SharedCode INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/source")
+
 # Adds a BinaryData target for embedding assets into the binary
 pamplejuce_add_assets()
 
@@ -138,7 +141,7 @@ target_compile_definitions(SharedCode
     VERSION="${CURRENT_VERSION}"
 
     # JucePlugin_Name is for some reason doesn't use the nicer PRODUCT_NAME
-    PRODUCT_NAME_WITHOUT_VERSION="Pamplejuce"
+    PRODUCT_NAME_WITHOUT_VERSION="Transient Sculptor"
 )
 
 # Link to any other modules you added (with juce_add_module) here!
@@ -162,8 +165,10 @@ target_link_libraries(SharedCode
 # Link the JUCE plugin targets our SharedCode target
 target_link_libraries("${PROJECT_NAME}" PRIVATE SharedCode)
 
-# IPP support, comment out to disable
-include(PamplejuceIPP)
+# Intel IPP support (optional, SIMD-optimised DSP primitives).
+# Disabled while the DSP is being developed: it adds a dependency and only covers
+# x86_64 on macOS. Uncomment when you actually need `ipps*` functions.
+# include(PamplejuceIPP)
 
 # Everything related to the tests target
 pamplejuce_add_tests()

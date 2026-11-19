@@ -2,9 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
-#if (MSVC)
-#include "ipps.h"
-#endif
+#include "dsp/AdaptiveTransientShaper.h"
 
 class PluginProcessor : public juce::AudioProcessor
 {
@@ -18,6 +16,9 @@ public:
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    // Keep the double-precision overload visible (it is not overridden).
+    using juce::AudioProcessor::processBlock;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override;
@@ -38,6 +39,28 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    juce::AudioProcessorValueTreeState apvts;
+
 private:
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    void cacheParameterPointers();
+
+    AdaptiveTransientShaper transientShaper;
+
+    std::atomic<float>* modeParam = nullptr;
+    std::atomic<float>* depthParam = nullptr;
+    std::atomic<float>* sensitivityParam = nullptr;
+    std::atomic<float>* sharpnessParam = nullptr;
+    std::atomic<float>* decayParam = nullptr;
+    std::atomic<float>* decayLfHfParam = nullptr;
+    std::atomic<float>* stereoModeParam = nullptr;
+    std::atomic<float>* stereoLinkParam = nullptr;
+    std::atomic<float>* balanceParam = nullptr;
+    std::atomic<float>* mixParam = nullptr;
+    std::atomic<float>* trimParam = nullptr;
+    std::atomic<float>* deltaParam = nullptr;
+    std::atomic<float>* bypassParam = nullptr;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };
