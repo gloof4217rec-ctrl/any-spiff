@@ -15,13 +15,18 @@ SensitivityCurveComponent::SensitivityCurveComponent (PluginProcessor& p)
     : processor (p)
 {
     setOpaque (true);
-    startTimerHz (30);
 }
 
 SensitivityCurveComponent::~SensitivityCurveComponent() = default;
 
 void SensitivityCurveComponent::timerCallback()
 {
+    if (! isShowing())
+    {
+        stopTimer();
+        return;
+    }
+
     processor.getReductionSnapshot (reduction);
     repaint();
 }
@@ -104,6 +109,9 @@ sensitivity::Parameters SensitivityCurveComponent::currentCurve() const
 
 void SensitivityCurveComponent::paint (juce::Graphics& g)
 {
+    if (isShowing() && ! isTimerRunning())
+        startTimerHz (30);
+
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
 
     const auto plot = getPlotBounds();

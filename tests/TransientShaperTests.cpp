@@ -413,4 +413,34 @@ TEST_CASE ("Reduction snapshot is silent at zero depth", "[dsp]")
     CHECK (peakReduction < 1.0e-6f);
 }
 
+TEST_CASE ("All resolutions stay finite and still process", "[dsp]")
+{
+    const auto input = makeClickySignal (24000);
+
+    for (const auto resolutionHops : { 1, 2, 4 })
+    {
+        AdaptiveTransientShaper shaper;
+        shaper.prepare (testSampleRate);
+
+        auto output = input;
+        auto parameters = makeActiveCutParameters();
+        parameters.resolutionHops = resolutionHops;
+        processInBlocks (shaper, output, parameters);
+
+        // The decimated detector path must never produce garbage.
+        auto allFinite = true;
+
+        for (int channel = 0; channel < output.getNumChannels(); ++channel)
+            for (int sample = 0; sample < output.getNumSamples(); ++sample)
+                allFinite = allFinite && std::isfinite (output.getSample (channel, sample));
+
+        CHECK (allFinite);
+
+        // The click is still reduced at every resolution.
+        const auto clickBefore = rms (input, 12000, 2048);
+        const auto clickAfter = rms (output, 12000 + latencySamples, 2048);
+        CHECK (clickAfter < 0.95f * clickBefore);
+    }
+}
+
 

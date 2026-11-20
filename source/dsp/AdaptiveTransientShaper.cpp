@@ -96,6 +96,7 @@ void AdaptiveTransientShaper::reset()
     }
 
     hopCounter = 0;
+    resolutionCounter = 0;
 
     weight.fill (1.0f);
     curveCached = false;
@@ -198,7 +199,7 @@ float AdaptiveTransientShaper::pushSample (ChannelState& channel, float input)
     return wet;
 }
 
-void AdaptiveTransientShaper::analyseChannel (ChannelState& channel)
+void AdaptiveTransientShaper::transformChannel (ChannelState& channel)
 {
     // The oldest sample sits where the next write would go: that is the frame start.
     for (int i = 0; i < fftSize; ++i)
@@ -211,7 +212,10 @@ void AdaptiveTransientShaper::analyseChannel (ChannelState& channel)
     std::fill (channel.fftWork.begin() + fftSize, channel.fftWork.end(), 0.0f);
 
     fft.performRealOnlyForwardTransform (channel.fftWork.data());
+}
 
+void AdaptiveTransientShaper::detectChannel (ChannelState& channel)
+{
     for (int bin = 0; bin < numBins; ++bin)
     {
         const auto real = channel.fftWork[(size_t) (2 * bin)];
@@ -299,33 +303,41 @@ void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float de
     std::fill (channel.overlap.end() - hopSize, channel.overlap.end(), 0.0f);
 }
 
-void AdaptiveTransientShaper::processFrame (const TransientShaperParameters& parameters, int numActiveChannels)
+void AdaptiveTransientShaper::processFrame (const TransientShaperParameters& parameters, int numActiveChannels, bool updateDetector)
 {
+    // The forward transform always runs (the synthesis needs the current frame's
+    // spectrum); the detector only refreshes every resolutionHops hops.
     for (int c = 0; c < numActiveChannels; ++c)
-        analyseChannel (channels[(size_t) c]);
+        transformChannel (channels[(size_t) c]);
 
-    if (numActiveChannels == 2)
+    if (updateDetector)
     {
-        const auto link = juce::jlimit (0.0f, 1.0f, parameters.stereoLink);
+        for (int c = 0; c < numActiveChannels; ++c)
+            detectChannel (channels[(size_t) c]);
 
-        if (link > 0.0f)
+        if (numActiveChannels == 2)
         {
-            for (int bin = 0; bin < numBins; ++bin)
-            {
-                auto& left = channels[0].amount[(size_t) bin];
-                auto& right = channels[1].amount[(size_t) bin];
-                const auto mean = 0.5f * (left + right);
+            const auto link = juce::jlimit (0.0f, 1.0f, parameters.stereoLink);
 
-                left += link * (mean - left);
-                right += link * (mean - right);
+            if (link > 0.0f)
+            {
+                for (int bin = 0; bin < numBins; ++bin)
+                {
+                    auto& left = channels[0].amount[(size_t) bin];
+                    auto& right = channels[1].amount[(size_t) bin];
+                    const auto mean = 0.5f * (left + right);
+
+                    left += link * (mean - left);
+                    right += link * (mean - right);
+                }
             }
         }
+
+        for (int c = 0; c < numActiveChannels; ++c)
+            applySharpness (channels[(size_t) c], parameters.sharpness);
     }
 
     depthSmoothed.skip (hopSize);
-
-    for (int c = 0; c < numActiveChannels; ++c)
-        applySharpness (channels[(size_t) c], parameters.sharpness);
 
     auto depthLeft = 1.0f;
     auto depthRight = 1.0f;
@@ -379,7 +391,14 @@ void AdaptiveTransientShaper::process (juce::AudioBuffer<float>& buffer, const T
         if (++hopCounter >= hopSize)
         {
             hopCounter = 0;
-            processFrame (parameters, numActiveChannels);
+
+            const auto resolutionHops = juce::jmax (1, parameters.resolutionHops);
+            const auto updateDetector = ++resolutionCounter >= resolutionHops;
+
+            if (updateDetector)
+                resolutionCounter = 0;
+
+            processFrame (parameters, numActiveChannels, updateDetector);
         }
 
         const auto dryLeft = channels[0].drySample;

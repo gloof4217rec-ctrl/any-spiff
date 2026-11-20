@@ -146,6 +146,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
                                                         StringArray { "Off", "12 dB/oct", "24 dB/oct", "48 dB/oct" },
                                                         0));
 
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "resolution", versionHint },
+                                                        "Resolution",
+                                                        StringArray { "Low", "Medium", "High" },
+                                                        2));
+
     return layout;
 }
 
@@ -164,6 +169,7 @@ void PluginProcessor::cacheParameterPointers()
     trimParam = apvts.getRawParameterValue ("trim");
     deltaParam = apvts.getRawParameterValue ("delta");
     bypassParam = apvts.getRawParameterValue ("bypass");
+    resolutionParam = apvts.getRawParameterValue ("resolution");
 
     bandListenParam = apvts.getRawParameterValue ("band_listen");
     band1FreqParam = apvts.getRawParameterValue ("band1_freq");
@@ -191,6 +197,7 @@ void PluginProcessor::cacheParameterPointers()
              && stereoModeParam != nullptr && stereoLinkParam != nullptr && balanceParam != nullptr
              && mixParam != nullptr && trimParam != nullptr && deltaParam != nullptr
              && bypassParam != nullptr
+             && resolutionParam != nullptr
              && bandListenParam != nullptr && band1FreqParam != nullptr && band1GainParam != nullptr
              && band1QParam != nullptr && band1TypeParam != nullptr && band1OnParam != nullptr
              && band2FreqParam != nullptr && band2GainParam != nullptr && band2QParam != nullptr
@@ -336,6 +343,9 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     parameters.trimDb = trimParam->load();
     parameters.delta = deltaParam->load() > 0.5f;
     parameters.bypass = bypassParam->load() > 0.5f;
+
+    const auto resolutionIndex = juce::jlimit (0, 2, (int) resolutionParam->load());
+    parameters.resolutionHops = 1 << (2 - resolutionIndex);   // low=4, medium=2, high=1
 
     parameters.bandListen = bandListenParam->load() > 0.5f;
     parameters.listenFrequencyHz = bandListenFrequency.load();

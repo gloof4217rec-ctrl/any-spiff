@@ -15,6 +15,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     setUpCombo (modeBox, modeLabel, "mode", "Mode", modeAttachment);
     setUpCombo (stereoModeBox, stereoModeLabel, "stereo_mode", "Stereo Mode", stereoModeAttachment);
+    setUpCombo (resolutionBox, resolutionLabel, "resolution", "Resolution", resolutionAttachment);
 
     addAndMakeVisible (deltaButton);
     addAndMakeVisible (bypassButton);
@@ -150,19 +151,25 @@ void PluginEditor::resized()
         control.slider.setBounds (cell.reduced (4));
     }
 
-    const auto comboWidth = juce::jmin (160, switches.getWidth() / 4);
+    const auto comboWidth = juce::jmin (150, switches.getWidth() / 6);
 
     auto modeArea = switches.removeFromLeft (comboWidth);
     modeLabel.setBounds (modeArea.removeFromTop (16));
     modeBox.setBounds (modeArea.removeFromTop (26));
 
-    switches.removeFromLeft (12);
+    switches.removeFromLeft (10);
 
     auto stereoArea = switches.removeFromLeft (comboWidth);
     stereoModeLabel.setBounds (stereoArea.removeFromTop (16));
     stereoModeBox.setBounds (stereoArea.removeFromTop (26));
 
-    switches.removeFromLeft (12);
+    switches.removeFromLeft (10);
+
+    auto resolutionArea = switches.removeFromLeft (comboWidth);
+    resolutionLabel.setBounds (resolutionArea.removeFromTop (16));
+    resolutionBox.setBounds (resolutionArea.removeFromTop (26));
+
+    switches.removeFromLeft (10);
 
     deltaButton.setBounds (switches.removeFromLeft (80).withSizeKeepingCentre (80, 24));
     switches.removeFromLeft (8);

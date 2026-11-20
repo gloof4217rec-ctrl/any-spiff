@@ -27,6 +27,7 @@ struct TransientShaperParameters
     bool bypass = false;      // soft bypass (the DSP keeps running)
     bool boost = false;       // boost transients instead of cutting them
     bool midSide = false;     // detect/process mid and side instead of left and right
+    int resolutionHops = 1;   // detector updates every N hops (1/2/4 = high/medium/low)
 
     sensitivity::Parameters curve;   // frequency-dependent detector weighting
     bool bandListen = false;         // monitor only the delta inside the listened band
@@ -98,9 +99,10 @@ private:
         float drySample = 0.0f;
     };
 
-    void analyseChannel (ChannelState& channel);
+    void transformChannel (ChannelState& channel);
+    void detectChannel (ChannelState& channel);
     void synthesiseChannel (ChannelState& channel, float depthScale, bool boost, bool updateReduction);
-    void processFrame (const TransientShaperParameters& parameters, int numActiveChannels);
+    void processFrame (const TransientShaperParameters& parameters, int numActiveChannels, bool updateDetector);
     void updateBlockCoefficients (const TransientShaperParameters& parameters);
     void applySharpness (ChannelState& channel, float sharpness);
     float pushSample (ChannelState& channel, float input);
@@ -113,6 +115,7 @@ private:
 
     double sampleRate = 48000.0;
     int hopCounter = 0;
+    int resolutionCounter = 0;
     float synthesisScale = 2.0f / 3.0f;
 
     float thresholdDb = 6.0f;

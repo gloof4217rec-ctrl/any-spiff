@@ -25,6 +25,15 @@ namespace
         {
             processor.editorBeingDeleted (editor);
             delete editor;
+
+            // Headless Linux: nothing pumps the message socket queue while the Catch
+            // session runs synchronously, so a few editors' worth of repaint/async
+            // messages would overflow it. Drain it after each editor test.
+            if (auto* mm = juce::MessageManager::getInstance())
+            {
+                mm->setCurrentThreadAsMessageThread();
+                mm->runDispatchLoopUntil (5);
+            }
         }
 
         juce::AudioProcessorEditor& get() const { return *editor; }
@@ -58,6 +67,10 @@ TEST_CASE ("Editor shows every parameter")
         REQUIRE (combo != nullptr);
         REQUIRE (combo->getNumItems() == 2);
     }
+
+    auto* resolutionCombo = dynamic_cast<juce::ComboBox*> (findChildByName (editor, "resolution"));
+    REQUIRE (resolutionCombo != nullptr);
+    REQUIRE (resolutionCombo->getNumItems() == 3);
 
     // Two toggles, found by their text rather than by ID.
     int numToggles = 0;
