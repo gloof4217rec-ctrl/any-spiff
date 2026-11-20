@@ -104,10 +104,19 @@ void AdaptiveTransientShaper::reset()
     listenZ1.fill (0.0f);
     listenZ2.fill (0.0f);
 
+    for (auto& amount : reductionAmount)
+        amount.store (0.0f);
+
     depthSmoothed.setCurrentAndTargetValue (0.0f);
     mixSmoothed.setCurrentAndTargetValue (1.0f);
     trimSmoothed.setCurrentAndTargetValue (1.0f);
     activeSmoothed.setCurrentAndTargetValue (1.0f);
+}
+
+void AdaptiveTransientShaper::copyReduction (std::array<float, numBins>& destination) const noexcept
+{
+    for (int bin = 0; bin < numBins; ++bin)
+        destination[(size_t) bin] = reductionAmount[(size_t) bin].load();
 }
 
 //==============================================================================
@@ -245,7 +254,7 @@ void AdaptiveTransientShaper::applySharpness (ChannelState& channel, float sharp
     }
 }
 
-void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float depthScale, bool boost)
+void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float depthScale, bool boost, bool updateReduction)
 {
     const auto depth = depthSmoothed.getCurrentValue() * juce::jlimit (0.0f, 1.0f, depthScale);
 
@@ -256,6 +265,9 @@ void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float de
                                 : juce::jmax (0.0f, 1.0f - amount);
 
         channel.gain[(size_t) bin] = gain;
+
+        if (updateReduction)
+            reductionAmount[(size_t) bin].store (amount);
 
         channel.fftWork[(size_t) (2 * bin)] *= gain;
         channel.fftWork[(size_t) (2 * bin + 1)] *= gain;
@@ -325,10 +337,10 @@ void AdaptiveTransientShaper::processFrame (const TransientShaperParameters& par
         depthRight = 1.0f - juce::jmax (0.0f, -balance);
     }
 
-    synthesiseChannel (channels[0], depthLeft, parameters.boost);
+    synthesiseChannel (channels[0], depthLeft, parameters.boost, true);
 
     if (numActiveChannels == 2)
-        synthesiseChannel (channels[1], depthRight, parameters.boost);
+        synthesiseChannel (channels[1], depthRight, parameters.boost, false);
 }
 
 //==============================================================================

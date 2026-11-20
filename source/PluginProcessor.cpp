@@ -385,6 +385,11 @@ void PluginProcessor::endBandListen()
         param->setValueNotifyingHost (0.0f);
 }
 
+void PluginProcessor::getReductionSnapshot (std::array<float, AdaptiveTransientShaper::numBins>& destination) const
+{
+    transientShaper.copyReduction (destination);
+}
+
 //==============================================================================
 bool PluginProcessor::hasEditor() const
 {

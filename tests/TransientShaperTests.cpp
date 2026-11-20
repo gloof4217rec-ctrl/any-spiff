@@ -363,4 +363,54 @@ TEST_CASE ("Sensitivity curve weakens the cut", "[dsp]")
     CHECK (clickAttenuated > clickFlat);
 }
 
+TEST_CASE ("Reduction snapshot reports active bins", "[dsp]")
+{
+    AdaptiveTransientShaper shaper;
+    shaper.prepare (testSampleRate);
+
+    auto output = makeClickySignal (48000);
+    const auto parameters = makeActiveCutParameters();
+
+    std::array<float, AdaptiveTransientShaper::numBins> snapshot {};
+    float peakReduction = 0.0f;
+
+    for (int start = 0; start < output.getNumSamples(); start += 256)
+    {
+        const auto numSamples = juce::jmin (256, output.getNumSamples() - start);
+        juce::AudioBuffer<float> block (output.getArrayOfWritePointers(), output.getNumChannels(), start, numSamples);
+        shaper.process (block, parameters);
+        shaper.copyReduction (snapshot);
+
+        for (auto amount : snapshot)
+            peakReduction = juce::jmax (peakReduction, amount);
+    }
+
+    CHECK (peakReduction > 0.1f);
+}
+
+TEST_CASE ("Reduction snapshot is silent at zero depth", "[dsp]")
+{
+    AdaptiveTransientShaper shaper;
+    shaper.prepare (testSampleRate);
+
+    auto output = makeClickySignal (24000);
+    TransientShaperParameters parameters; // depth 0
+
+    std::array<float, AdaptiveTransientShaper::numBins> snapshot {};
+    float peakReduction = 0.0f;
+
+    for (int start = 0; start < output.getNumSamples(); start += 256)
+    {
+        const auto numSamples = juce::jmin (256, output.getNumSamples() - start);
+        juce::AudioBuffer<float> block (output.getArrayOfWritePointers(), output.getNumChannels(), start, numSamples);
+        shaper.process (block, parameters);
+        shaper.copyReduction (snapshot);
+
+        for (auto amount : snapshot)
+            peakReduction = juce::jmax (peakReduction, amount);
+    }
+
+    CHECK (peakReduction < 1.0e-6f);
+}
+
 

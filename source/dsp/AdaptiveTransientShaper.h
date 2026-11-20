@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
 
@@ -68,6 +70,11 @@ public:
     /** The STFT latency (one full FFT frame) that must be reported to the host. */
     int getLatencySamples() const noexcept { return fftSize; }
 
+    /** Copies the current per-bin processing amount (0..1) for the reduction
+        graph. Safe to call from the message thread.
+    */
+    void copyReduction (std::array<float, numBins>& destination) const noexcept;
+
 private:
     struct ChannelState
     {
@@ -92,7 +99,7 @@ private:
     };
 
     void analyseChannel (ChannelState& channel);
-    void synthesiseChannel (ChannelState& channel, float depthScale, bool boost);
+    void synthesiseChannel (ChannelState& channel, float depthScale, bool boost, bool updateReduction);
     void processFrame (const TransientShaperParameters& parameters, int numActiveChannels);
     void updateBlockCoefficients (const TransientShaperParameters& parameters);
     void applySharpness (ChannelState& channel, float sharpness);
@@ -129,6 +136,10 @@ private:
     sensitivity::Biquad listenBiquad;
     std::array<float, maxChannels> listenZ1 {};
     std::array<float, maxChannels> listenZ2 {};
+
+    // Per-bin processing amount published for the reduction graph. Written on
+    // the audio thread (once per frame) and read by the message thread.
+    std::array<std::atomic<float>, numBins> reductionAmount {};
 
     juce::SmoothedValue<float> depthSmoothed;
     juce::SmoothedValue<float> mixSmoothed;

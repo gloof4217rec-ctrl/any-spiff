@@ -47,6 +47,9 @@ public:
     void beginBandListen (float frequencyHz, float q);
     void endBandListen();
 
+    /** Copies the current per-bin processing amount (0..1) for the reduction graph. */
+    void getReductionSnapshot (std::array<float, AdaptiveTransientShaper::numBins>& destination) const;
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 

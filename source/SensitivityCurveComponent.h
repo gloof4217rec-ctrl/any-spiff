@@ -9,15 +9,18 @@
     drag three band nodes (frequency x gain) plus the lo/hi cut handles.
 
     Alt-dragging a band node temporarily enables band listen, so the user hears
-    only the delta signal in that band while hunting for a frequency.
+    only the delta signal in that band while hunting for a frequency. A second,
+    live curve shows the actual per-frequency reduction.
 */
-class SensitivityCurveComponent : public juce::Component
+class SensitivityCurveComponent : public juce::Component,
+                                  public juce::Timer
 {
 public:
     explicit SensitivityCurveComponent (PluginProcessor& processor);
     ~SensitivityCurveComponent() override;
 
     void paint (juce::Graphics&) override;
+    void timerCallback() override;
 
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
@@ -62,11 +65,14 @@ private:
 
     sensitivity::Parameters currentCurve() const;
     void drawCurve (juce::Graphics&, const sensitivity::Parameters&, double sampleRate);
+    void drawReduction (juce::Graphics&, const sensitivity::Parameters&, double sampleRate);
     void drawNodes (juce::Graphics&, const sensitivity::Parameters&);
 
     DragTarget findDragTarget (const juce::Point<int>& position, int& bandIndex) const;
 
     PluginProcessor& processor;
+
+    std::array<float, AdaptiveTransientShaper::numBins> reduction {};
 
     DragTarget dragTarget = DragTarget::none;
     int dragBand = -1;

@@ -15,9 +15,16 @@ SensitivityCurveComponent::SensitivityCurveComponent (PluginProcessor& p)
     : processor (p)
 {
     setOpaque (true);
+    startTimerHz (30);
 }
 
 SensitivityCurveComponent::~SensitivityCurveComponent() = default;
+
+void SensitivityCurveComponent::timerCallback()
+{
+    processor.getReductionSnapshot (reduction);
+    repaint();
+}
 
 juce::Rectangle<int> SensitivityCurveComponent::getPlotBounds() const
 {
@@ -130,8 +137,55 @@ void SensitivityCurveComponent::paint (juce::Graphics& g)
     const auto sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
     const auto curve = currentCurve();
 
+    drawReduction (g, curve, sampleRate);
     drawCurve (g, curve, sampleRate);
     drawNodes (g, curve);
+}
+
+void SensitivityCurveComponent::drawReduction (juce::Graphics& g, const sensitivity::Parameters&, double sampleRate)
+{
+    const auto plot = getPlotBounds();
+    const auto numBins = (int) reduction.size();
+
+    if (numBins < 2)
+        return;
+
+    const auto boost = readParameter ("mode") > 0.5f;
+    const auto colour = boost ? juce::Colour (0xffd94f4f)   // red
+                              : juce::Colour (0xff4f8bd9);  // blue
+    const auto nyquist = (float) (sampleRate * 0.5);
+    const auto zeroY = gainToY (0.0f);
+
+    juce::Path curvePath;
+    juce::Path fillPath;
+
+    fillPath.startNewSubPath ((float) plot.getX(), zeroY);
+
+    for (int bin = 0; bin < numBins; ++bin)
+    {
+        const auto amount = juce::jlimit (0.0f, 1.0f, reduction[(size_t) bin]);
+        const auto frequency = (float) bin / (float) (numBins - 1) * nyquist;
+        const auto gainDb = boost ? 20.0f * std::log10 (1.0f + amount)
+                                  : 20.0f * std::log10 (juce::jmax (0.001f, 1.0f - amount));
+
+        const auto x = frequencyToX (frequency);
+        const auto y = gainToY ((float) gainDb);
+
+        if (bin == 0)
+            curvePath.startNewSubPath (x, y);
+        else
+            curvePath.lineTo (x, y);
+
+        fillPath.lineTo (x, y);
+    }
+
+    fillPath.lineTo ((float) plot.getRight(), zeroY);
+    fillPath.closeSubPath();
+
+    g.setColour (colour.withAlpha (0.22f));
+    g.fillPath (fillPath);
+    g.setColour (colour.withAlpha (0.9f));
+    g.strokePath (curvePath, juce::PathStrokeType (1.25f));
 }
 
 void SensitivityCurveComponent::drawCurve (juce::Graphics& g, const sensitivity::Parameters& curve, double sampleRate)
