@@ -16,6 +16,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     setUpCombo (modeBox, modeLabel, "mode", "Mode", modeAttachment);
     setUpCombo (stereoModeBox, stereoModeLabel, "stereo_mode", "Stereo Mode", stereoModeAttachment);
     setUpCombo (resolutionBox, resolutionLabel, "resolution", "Resolution", resolutionAttachment);
+    setUpCombo (oversampleBox, oversampleLabel, "oversample", "Oversample", oversampleAttachment);
 
     addAndMakeVisible (deltaButton);
     addAndMakeVisible (bypassButton);
@@ -168,6 +169,12 @@ void PluginEditor::resized()
     auto resolutionArea = switches.removeFromLeft (comboWidth);
     resolutionLabel.setBounds (resolutionArea.removeFromTop (16));
     resolutionBox.setBounds (resolutionArea.removeFromTop (26));
+
+    switches.removeFromLeft (10);
+
+    auto oversampleArea = switches.removeFromLeft (comboWidth);
+    oversampleLabel.setBounds (oversampleArea.removeFromTop (16));
+    oversampleBox.setBounds (oversampleArea.removeFromTop (26));
 
     switches.removeFromLeft (10);
 

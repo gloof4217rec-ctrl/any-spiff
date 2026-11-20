@@ -28,6 +28,7 @@ struct TransientShaperParameters
     bool boost = false;       // boost transients instead of cutting them
     bool midSide = false;     // detect/process mid and side instead of left and right
     int resolutionHops = 1;   // detector updates every N hops (1/2/4 = high/medium/low)
+    int oversamplingFactor = 1; // 1/2/4/8 = off/2x/4x/8x
 
     sensitivity::Parameters curve;   // frequency-dependent detector weighting
     bool bandListen = false;         // monitor only the delta inside the listened band
@@ -68,8 +69,18 @@ public:
     /** Processes the buffer in place. The output is delayed by getLatencySamples(). */
     void process (juce::AudioBuffer<float>& buffer, const TransientShaperParameters& parameters);
 
-    /** The STFT latency (one full FFT frame) that must be reported to the host. */
-    int getLatencySamples() const noexcept { return fftSize; }
+    /** The STFT latency (one full FFT frame) that must be reported to the host.
+        Includes the oversampler delay when oversampling is active.
+    */
+    int getLatencySamples() const noexcept
+    {
+        const auto factor = juce::jmax (1, currentOversamplingFactor.load());
+        const auto osLatency = oversampler != nullptr
+                             ? (int) std::llround ((double) oversampler->getLatencyInSamples())
+                             : 0;
+
+        return osLatency + fftSize / factor;
+    }
 
     /** Copies the current per-bin processing amount (0..1) for the reduction
         graph. Safe to call from the message thread.
@@ -103,6 +114,9 @@ private:
     void detectChannel (ChannelState& channel);
     void synthesiseChannel (ChannelState& channel, float depthScale, bool boost, bool updateReduction);
     void processFrame (const TransientShaperParameters& parameters, int numActiveChannels, bool updateDetector);
+    void processBlock (float* const* channelData, int numChannels, int numSamples, const TransientShaperParameters& parameters);
+    void applyOversamplingFactor (int factor);
+    void configureDsp (double effectiveSampleRate);
     void updateBlockCoefficients (const TransientShaperParameters& parameters);
     void applySharpness (ChannelState& channel, float sharpness);
     float pushSample (ChannelState& channel, float input);
@@ -114,9 +128,13 @@ private:
     std::array<float, fftSize> window {};
 
     double sampleRate = 48000.0;
+    double baseSampleRate = 48000.0;
     int hopCounter = 0;
     int resolutionCounter = 0;
     float synthesisScale = 2.0f / 3.0f;
+
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversampler;
+    std::atomic<int> currentOversamplingFactor { 1 };
 
     float thresholdDb = 6.0f;
     float lastDecay = -1.0f;     // release-curve cache (rebuilt when Decay moves)

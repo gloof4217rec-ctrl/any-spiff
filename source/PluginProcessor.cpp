@@ -151,6 +151,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
                                                         StringArray { "Low", "Medium", "High" },
                                                         2));
 
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "oversample", versionHint },
+                                                        "Oversample",
+                                                        StringArray { "Off", "2x", "4x", "8x" },
+                                                        0));
+
     return layout;
 }
 
@@ -170,6 +175,7 @@ void PluginProcessor::cacheParameterPointers()
     deltaParam = apvts.getRawParameterValue ("delta");
     bypassParam = apvts.getRawParameterValue ("bypass");
     resolutionParam = apvts.getRawParameterValue ("resolution");
+    oversampleParam = apvts.getRawParameterValue ("oversample");
 
     bandListenParam = apvts.getRawParameterValue ("band_listen");
     band1FreqParam = apvts.getRawParameterValue ("band1_freq");
@@ -198,6 +204,7 @@ void PluginProcessor::cacheParameterPointers()
              && mixParam != nullptr && trimParam != nullptr && deltaParam != nullptr
              && bypassParam != nullptr
              && resolutionParam != nullptr
+             && oversampleParam != nullptr
              && bandListenParam != nullptr && band1FreqParam != nullptr && band1GainParam != nullptr
              && band1QParam != nullptr && band1TypeParam != nullptr && band1OnParam != nullptr
              && band2FreqParam != nullptr && band2GainParam != nullptr && band2QParam != nullptr
@@ -281,7 +288,8 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     juce::ignoreUnused (samplesPerBlock);
 
     transientShaper.prepare (sampleRate);
-    setLatencySamples (transientShaper.getLatencySamples());
+    lastReportedLatency = transientShaper.getLatencySamples();
+    setLatencySamples (lastReportedLatency);
 }
 
 void PluginProcessor::releaseResources()
@@ -347,6 +355,9 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     const auto resolutionIndex = juce::jlimit (0, 2, (int) resolutionParam->load());
     parameters.resolutionHops = 1 << (2 - resolutionIndex);   // low=4, medium=2, high=1
 
+    const auto oversampleIndex = juce::jlimit (0, 3, (int) oversampleParam->load());
+    parameters.oversamplingFactor = 1 << oversampleIndex;     // off=1, 2x=2, 4x=4, 8x=8
+
     parameters.bandListen = bandListenParam->load() > 0.5f;
     parameters.listenFrequencyHz = bandListenFrequency.load();
     parameters.listenQ = bandListenQ.load();
@@ -378,6 +389,15 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     parameters.curve.hiCutSlopeDbPerOctave = (int) hiCutSlopeParam->load() * 12;
 
     transientShaper.process (buffer, parameters);
+
+    // Oversampling changes the latency at runtime, so keep the host in sync.
+    const auto latency = transientShaper.getLatencySamples();
+
+    if (latency != lastReportedLatency)
+    {
+        lastReportedLatency = latency;
+        setLatencySamples (latency);
+    }
 }
 
 void PluginProcessor::beginBandListen (float frequencyHz, float q)

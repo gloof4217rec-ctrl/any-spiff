@@ -71,6 +71,7 @@ private:
     std::atomic<float>* deltaParam = nullptr;
     std::atomic<float>* bypassParam = nullptr;
     std::atomic<float>* resolutionParam = nullptr;
+    std::atomic<float>* oversampleParam = nullptr;
 
     std::atomic<float>* bandListenParam = nullptr;
     std::atomic<float>* band1FreqParam = nullptr;
@@ -95,6 +96,8 @@ private:
 
     std::atomic<float> bandListenFrequency { 1000.0f };
     std::atomic<float> bandListenQ { 1.0f };
+
+    int lastReportedLatency = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };

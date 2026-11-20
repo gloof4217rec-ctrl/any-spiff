@@ -38,7 +38,15 @@ void AdaptiveTransientShaper::calibrateFftScale()
 
 void AdaptiveTransientShaper::prepare (double newSampleRate)
 {
-    sampleRate = newSampleRate > 0.0 ? newSampleRate : 48000.0;
+    baseSampleRate = newSampleRate > 0.0 ? newSampleRate : 48000.0;
+    currentOversamplingFactor.store (1);
+    oversampler.reset();
+    configureDsp (baseSampleRate);
+}
+
+void AdaptiveTransientShaper::configureDsp (double effectiveSampleRate)
+{
+    sampleRate = effectiveSampleRate;
 
     for (int i = 0; i < fftSize; ++i)
         window[(size_t) i] = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * (float) i / (float) fftSize);
@@ -66,6 +74,33 @@ void AdaptiveTransientShaper::prepare (double newSampleRate)
     activeSmoothed.reset (sampleRate, 0.01);
 
     reset();
+}
+
+void AdaptiveTransientShaper::applyOversamplingFactor (int factor)
+{
+    factor = factor == 2 ? 2 : factor == 4 ? 4 : factor == 8 ? 8 : 1;
+    currentOversamplingFactor.store (factor);
+
+    if (factor > 1)
+    {
+        const auto exponent = factor == 2 ? 1 : factor == 4 ? 2 : 3;
+
+        // Allocates on a rare parameter change, never in the steady-state hot path.
+        oversampler = std::make_unique<juce::dsp::Oversampling<float>> (
+            (size_t) maxChannels,
+            (size_t) exponent,
+            juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
+            false,
+            true);
+
+        oversampler->initProcessing (2048);
+    }
+    else
+    {
+        oversampler.reset();
+    }
+
+    configureDsp (baseSampleRate * (double) factor);
 }
 
 void AdaptiveTransientShaper::reset()
@@ -358,10 +393,36 @@ void AdaptiveTransientShaper::processFrame (const TransientShaperParameters& par
 //==============================================================================
 void AdaptiveTransientShaper::process (juce::AudioBuffer<float>& buffer, const TransientShaperParameters& parameters)
 {
-    const auto numSamples = buffer.getNumSamples();
-    const auto numActiveChannels = juce::jmin (buffer.getNumChannels(), maxChannels);
+    auto factor = parameters.oversamplingFactor;
+    factor = factor == 2 ? 2 : factor == 4 ? 4 : factor == 8 ? 8 : 1;
 
-    if (numSamples <= 0 || numActiveChannels <= 0)
+    if (factor != currentOversamplingFactor.load())
+        applyOversamplingFactor (factor);
+
+    const auto numChannels = juce::jmin (buffer.getNumChannels(), maxChannels);
+
+    if (oversampler == nullptr)
+    {
+        processBlock (buffer.getArrayOfWritePointers(), numChannels, buffer.getNumSamples(), parameters);
+        return;
+    }
+
+    juce::dsp::AudioBlock<float> block (buffer);
+    auto oversampled = oversampler->processSamplesUp (block);
+
+    std::array<float*, maxChannels> channelData {};
+
+    for (int c = 0; c < numChannels; ++c)
+        channelData[(size_t) c] = oversampled.getChannelPointer ((size_t) c);
+
+    processBlock (channelData.data(), numChannels, (int) oversampled.getNumSamples(), parameters);
+
+    oversampler->processSamplesDown (block);
+}
+
+void AdaptiveTransientShaper::processBlock (float* const* channelData, int numChannels, int numSamples, const TransientShaperParameters& parameters)
+{
+    if (numSamples <= 0 || numChannels <= 0)
         return;
 
     updateBlockCoefficients (parameters);
@@ -371,11 +432,11 @@ void AdaptiveTransientShaper::process (juce::AudioBuffer<float>& buffer, const T
     trimSmoothed.setTargetValue (juce::Decibels::decibelsToGain (parameters.trimDb));
     activeSmoothed.setTargetValue (parameters.bypass ? 0.0f : 1.0f);
 
-    const auto isStereo = numActiveChannels > 1;
+    const auto isStereo = numChannels > 1;
     const auto isMidSide = isStereo && parameters.midSide;
 
-    auto* left = buffer.getWritePointer (0);
-    auto* right = isStereo ? buffer.getWritePointer (1) : nullptr;
+    auto* left = channelData[0];
+    auto* right = isStereo ? channelData[1] : nullptr;
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
@@ -398,7 +459,7 @@ void AdaptiveTransientShaper::process (juce::AudioBuffer<float>& buffer, const T
             if (updateDetector)
                 resolutionCounter = 0;
 
-            processFrame (parameters, numActiveChannels, updateDetector);
+            processFrame (parameters, numChannels, updateDetector);
         }
 
         const auto dryLeft = channels[0].drySample;

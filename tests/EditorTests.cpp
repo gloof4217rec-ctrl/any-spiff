@@ -72,6 +72,10 @@ TEST_CASE ("Editor shows every parameter")
     REQUIRE (resolutionCombo != nullptr);
     REQUIRE (resolutionCombo->getNumItems() == 3);
 
+    auto* oversampleCombo = dynamic_cast<juce::ComboBox*> (findChildByName (editor, "oversample"));
+    REQUIRE (oversampleCombo != nullptr);
+    REQUIRE (oversampleCombo->getNumItems() == 4);
+
     // Two toggles, found by their text rather than by ID.
     int numToggles = 0;
 
