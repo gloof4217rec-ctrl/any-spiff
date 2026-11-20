@@ -1,5 +1,10 @@
 name: Transient Sculptor
 
+# 👇 ДОБАВЛЕНО: Права на запись для создания релизов и чтения артефактов
+permissions:
+  contents: write
+  actions: read
+
 on:
   workflow_dispatch: # lets you run a build from the UI
   workflow_call: # lets other workflows call this one
@@ -85,7 +90,7 @@ jobs:
         run: brew install ninja osxutils
 
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4 # ИСПРАВЛЕНО: v4 вместо v7
         with:
           submodules: recursive
 
@@ -230,7 +235,7 @@ jobs:
 
       - name: Upload pkg (macOS)
         if: ${{ runner.os == 'macOS' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4 # ИСПРАВЛЕНО: v4 вместо v7
         with:
           name: ${{ env.ARTIFACT_NAME }}.pkg
           path: packaging/${{ env.ARTIFACT_NAME }}.pkg
@@ -242,10 +247,10 @@ jobs:
 
     steps:
       - name: Get Artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4 # ИСПРАВЛЕНО: v4 вместо v8
 
       - name: Create Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2 # ИСПРАВЛЕНО: v2 вместо v3
         with:
           prerelease: true
           # download-artifact puts these files in their own dirs...
