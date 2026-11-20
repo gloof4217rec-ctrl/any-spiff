@@ -72,6 +72,7 @@ private:
     std::atomic<float>* bypassParam = nullptr;
     std::atomic<float>* resolutionParam = nullptr;
     std::atomic<float>* oversampleParam = nullptr;
+    std::atomic<float>* phaseModeParam = nullptr;
 
     std::atomic<float>* bandListenParam = nullptr;
     std::atomic<float>* band1FreqParam = nullptr;

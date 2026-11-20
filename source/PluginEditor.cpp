@@ -17,6 +17,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     setUpCombo (stereoModeBox, stereoModeLabel, "stereo_mode", "Stereo Mode", stereoModeAttachment);
     setUpCombo (resolutionBox, resolutionLabel, "resolution", "Resolution", resolutionAttachment);
     setUpCombo (oversampleBox, oversampleLabel, "oversample", "Oversample", oversampleAttachment);
+    setUpCombo (phaseBox, phaseLabel, "phase_mode", "Phase", phaseAttachment);
 
     addAndMakeVisible (deltaButton);
     addAndMakeVisible (bypassButton);
@@ -129,6 +130,8 @@ void PluginEditor::resized()
     inspectButton.setBounds (area.removeFromBottom (24).removeFromRight (120));
     area.removeFromBottom (30);
 
+    auto advancedRow = area.removeFromBottom (46);
+    area.removeFromBottom (8);
     auto switches = area.removeFromBottom (46);
     area.removeFromBottom (12);
 
@@ -152,33 +155,41 @@ void PluginEditor::resized()
         control.slider.setBounds (cell.reduced (4));
     }
 
-    const auto comboWidth = juce::jmin (150, switches.getWidth() / 6);
+    // Main row: mode, stereo mode, delta, bypass.
+    const auto mainComboWidth = juce::jmin (160, switches.getWidth() / 4);
 
-    auto modeArea = switches.removeFromLeft (comboWidth);
+    auto modeArea = switches.removeFromLeft (mainComboWidth);
     modeLabel.setBounds (modeArea.removeFromTop (16));
     modeBox.setBounds (modeArea.removeFromTop (26));
 
-    switches.removeFromLeft (10);
+    switches.removeFromLeft (12);
 
-    auto stereoArea = switches.removeFromLeft (comboWidth);
+    auto stereoArea = switches.removeFromLeft (mainComboWidth);
     stereoModeLabel.setBounds (stereoArea.removeFromTop (16));
     stereoModeBox.setBounds (stereoArea.removeFromTop (26));
 
-    switches.removeFromLeft (10);
-
-    auto resolutionArea = switches.removeFromLeft (comboWidth);
-    resolutionLabel.setBounds (resolutionArea.removeFromTop (16));
-    resolutionBox.setBounds (resolutionArea.removeFromTop (26));
-
-    switches.removeFromLeft (10);
-
-    auto oversampleArea = switches.removeFromLeft (comboWidth);
-    oversampleLabel.setBounds (oversampleArea.removeFromTop (16));
-    oversampleBox.setBounds (oversampleArea.removeFromTop (26));
-
-    switches.removeFromLeft (10);
+    switches.removeFromLeft (12);
 
     deltaButton.setBounds (switches.removeFromLeft (80).withSizeKeepingCentre (80, 24));
     switches.removeFromLeft (8);
     bypassButton.setBounds (switches.removeFromLeft (80).withSizeKeepingCentre (80, 24));
+
+    // Advanced row: resolution, oversample, phase mode.
+    const auto advancedComboWidth = juce::jmin (150, advancedRow.getWidth() / 3);
+
+    auto resolutionArea = advancedRow.removeFromLeft (advancedComboWidth);
+    resolutionLabel.setBounds (resolutionArea.removeFromTop (16));
+    resolutionBox.setBounds (resolutionArea.removeFromTop (26));
+
+    advancedRow.removeFromLeft (10);
+
+    auto oversampleArea = advancedRow.removeFromLeft (advancedComboWidth);
+    oversampleLabel.setBounds (oversampleArea.removeFromTop (16));
+    oversampleBox.setBounds (oversampleArea.removeFromTop (26));
+
+    advancedRow.removeFromLeft (10);
+
+    auto phaseArea = advancedRow.removeFromLeft (advancedComboWidth);
+    phaseLabel.setBounds (phaseArea.removeFromTop (16));
+    phaseBox.setBounds (phaseArea.removeFromTop (26));
 }

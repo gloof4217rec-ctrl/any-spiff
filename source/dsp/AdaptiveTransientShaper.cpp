@@ -293,7 +293,7 @@ void AdaptiveTransientShaper::applySharpness (ChannelState& channel, float sharp
     }
 }
 
-void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float depthScale, bool boost, bool updateReduction)
+void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float depthScale, bool boost, bool updateReduction, bool minimumPhase)
 {
     const auto depth = depthSmoothed.getCurrentValue() * juce::jlimit (0.0f, 1.0f, depthScale);
 
@@ -307,19 +307,31 @@ void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float de
 
         if (updateReduction)
             reductionAmount[(size_t) bin].store (amount);
-
-        channel.fftWork[(size_t) (2 * bin)] *= gain;
-        channel.fftWork[(size_t) (2 * bin + 1)] *= gain;
     }
 
-    // Mirror the gains onto the negative frequencies to keep the spectrum conjugate-symmetric.
-    for (int bin = 1; bin < numBins - 1; ++bin)
+    if (minimumPhase)
     {
-        const auto mirror = (size_t) (fftSize - bin);
-        const auto gain = channel.gain[(size_t) bin];
+        applyMinimumPhase (channel);
+    }
+    else
+    {
+        // Apply the (symmetric, zero-phase) gain to the positive frequencies...
+        for (int bin = 0; bin < numBins; ++bin)
+        {
+            const auto gain = channel.gain[(size_t) bin];
+            channel.fftWork[(size_t) (2 * bin)] *= gain;
+            channel.fftWork[(size_t) (2 * bin + 1)] *= gain;
+        }
 
-        channel.fftWork[2 * mirror] *= gain;
-        channel.fftWork[2 * mirror + 1] *= gain;
+        // ...and mirror the gains onto the negative frequencies to keep the spectrum conjugate-symmetric.
+        for (int bin = 1; bin < numBins - 1; ++bin)
+        {
+            const auto mirror = (size_t) (fftSize - bin);
+            const auto gain = channel.gain[(size_t) bin];
+
+            channel.fftWork[2 * mirror] *= gain;
+            channel.fftWork[2 * mirror + 1] *= gain;
+        }
     }
 
     fft.performRealOnlyInverseTransform (channel.fftWork.data());
@@ -336,6 +348,50 @@ void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float de
     std::memmove (channel.overlap.data(), channel.overlap.data() + hopSize,
                   (size_t) (fftSize - hopSize) * sizeof (float));
     std::fill (channel.overlap.end() - hopSize, channel.overlap.end(), 0.0f);
+}
+
+void AdaptiveTransientShaper::applyMinimumPhase (ChannelState& channel)
+{
+    // Cepstral method: build a minimum-phase spectrum with the same magnitude
+    // response as channel.gain, then apply it by a complex multiply.
+    const auto gainMin = 1.0e-4f;   // -80 dB floor so log(0) stays finite
+
+    for (int bin = 0; bin < numBins; ++bin)
+    {
+        minPhaseWork[(size_t) (2 * bin)] = std::log (juce::jmax (gainMin, channel.gain[(size_t) bin]));
+        minPhaseWork[(size_t) (2 * bin + 1)] = 0.0f;
+    }
+
+    // Real cepstrum of the log-magnitude.
+    fft.performRealOnlyInverseTransform (minPhaseWork.data());
+
+    // Fold into a causal sequence.
+    std::array<float, 2 * fftSize> folded {};
+    folded[0] = minPhaseWork[0];
+
+    for (int n = 1; n < fftSize / 2; ++n)
+        folded[(size_t) n] = 2.0f * minPhaseWork[(size_t) n];
+
+    folded[(size_t) (fftSize / 2)] = minPhaseWork[(size_t) (fftSize / 2)];
+
+    // H_min = exp(FFT(folded)).
+    fft.performRealOnlyForwardTransform (folded.data());
+
+    // Apply H_min to the frame spectrum.
+    for (int k = 0; k < fftSize; ++k)
+    {
+        const auto fr = channel.fftWork[(size_t) (2 * k)];
+        const auto fi = channel.fftWork[(size_t) (2 * k + 1)];
+
+        const auto re = folded[(size_t) (2 * k)];
+        const auto im = folded[(size_t) (2 * k + 1)];
+        const auto magnitude = std::exp (re);
+        const auto hr = magnitude * std::cos (im);
+        const auto hi = magnitude * std::sin (im);
+
+        channel.fftWork[(size_t) (2 * k)] = fr * hr - fi * hi;
+        channel.fftWork[(size_t) (2 * k + 1)] = fr * hi + fi * hr;
+    }
 }
 
 void AdaptiveTransientShaper::processFrame (const TransientShaperParameters& parameters, int numActiveChannels, bool updateDetector)
@@ -384,10 +440,10 @@ void AdaptiveTransientShaper::processFrame (const TransientShaperParameters& par
         depthRight = 1.0f - juce::jmax (0.0f, -balance);
     }
 
-    synthesiseChannel (channels[0], depthLeft, parameters.boost, true);
+    synthesiseChannel (channels[0], depthLeft, parameters.boost, true, parameters.minimumPhase);
 
     if (numActiveChannels == 2)
-        synthesiseChannel (channels[1], depthRight, parameters.boost, false);
+        synthesiseChannel (channels[1], depthRight, parameters.boost, false, parameters.minimumPhase);
 }
 
 //==============================================================================

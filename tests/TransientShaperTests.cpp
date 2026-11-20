@@ -473,4 +473,32 @@ TEST_CASE ("All oversampling factors stay finite and still process", "[dsp]")
     }
 }
 
+TEST_CASE ("Minimum phase mode stays finite and still processes", "[dsp]")
+{
+    const auto input = makeClickySignal (24000);
+
+    for (const auto minimumPhase : { false, true })
+    {
+        AdaptiveTransientShaper shaper;
+        shaper.prepare (testSampleRate);
+
+        auto output = input;
+        auto parameters = makeActiveCutParameters();
+        parameters.minimumPhase = minimumPhase;
+        processInBlocks (shaper, output, parameters);
+
+        auto allFinite = true;
+
+        for (int channel = 0; channel < output.getNumChannels(); ++channel)
+            for (int sample = 0; sample < output.getNumSamples(); ++sample)
+                allFinite = allFinite && std::isfinite (output.getSample (channel, sample));
+
+        CHECK (allFinite);
+
+        const auto clickBefore = rms (input, 12000, 2048);
+        const auto clickAfter = rms (output, 12000 + latencySamples, 2048);
+        CHECK (clickAfter < 0.95f * clickBefore);
+    }
+}
+
 

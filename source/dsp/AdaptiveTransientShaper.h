@@ -29,6 +29,7 @@ struct TransientShaperParameters
     bool midSide = false;     // detect/process mid and side instead of left and right
     int resolutionHops = 1;   // detector updates every N hops (1/2/4 = high/medium/low)
     int oversamplingFactor = 1; // 1/2/4/8 = off/2x/4x/8x
+    bool minimumPhase = false;  // false = linear (zero) phase, true = minimum phase
 
     sensitivity::Parameters curve;   // frequency-dependent detector weighting
     bool bandListen = false;         // monitor only the delta inside the listened band
@@ -112,7 +113,8 @@ private:
 
     void transformChannel (ChannelState& channel);
     void detectChannel (ChannelState& channel);
-    void synthesiseChannel (ChannelState& channel, float depthScale, bool boost, bool updateReduction);
+    void synthesiseChannel (ChannelState& channel, float depthScale, bool boost, bool updateReduction, bool minimumPhase);
+    void applyMinimumPhase (ChannelState& channel);
     void processFrame (const TransientShaperParameters& parameters, int numActiveChannels, bool updateDetector);
     void processBlock (float* const* channelData, int numChannels, int numSamples, const TransientShaperParameters& parameters);
     void applyOversamplingFactor (int factor);
@@ -161,6 +163,9 @@ private:
     // Per-bin processing amount published for the reduction graph. Written on
     // the audio thread (once per frame) and read by the message thread.
     std::array<std::atomic<float>, numBins> reductionAmount {};
+
+    // Scratch for the cepstral minimum-phase reconstruction.
+    std::array<float, 2 * fftSize> minPhaseWork {};
 
     juce::SmoothedValue<float> depthSmoothed;
     juce::SmoothedValue<float> mixSmoothed;

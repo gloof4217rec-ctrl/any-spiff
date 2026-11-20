@@ -156,6 +156,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
                                                         StringArray { "Off", "2x", "4x", "8x" },
                                                         0));
 
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "phase_mode", versionHint },
+                                                        "Phase Mode",
+                                                        StringArray { "Linear", "Minimum" },
+                                                        0));
+
     return layout;
 }
 
@@ -176,6 +181,7 @@ void PluginProcessor::cacheParameterPointers()
     bypassParam = apvts.getRawParameterValue ("bypass");
     resolutionParam = apvts.getRawParameterValue ("resolution");
     oversampleParam = apvts.getRawParameterValue ("oversample");
+    phaseModeParam = apvts.getRawParameterValue ("phase_mode");
 
     bandListenParam = apvts.getRawParameterValue ("band_listen");
     band1FreqParam = apvts.getRawParameterValue ("band1_freq");
@@ -205,6 +211,7 @@ void PluginProcessor::cacheParameterPointers()
              && bypassParam != nullptr
              && resolutionParam != nullptr
              && oversampleParam != nullptr
+             && phaseModeParam != nullptr
              && bandListenParam != nullptr && band1FreqParam != nullptr && band1GainParam != nullptr
              && band1QParam != nullptr && band1TypeParam != nullptr && band1OnParam != nullptr
              && band2FreqParam != nullptr && band2GainParam != nullptr && band2QParam != nullptr
@@ -357,6 +364,8 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     const auto oversampleIndex = juce::jlimit (0, 3, (int) oversampleParam->load());
     parameters.oversamplingFactor = 1 << oversampleIndex;     // off=1, 2x=2, 4x=4, 8x=8
+
+    parameters.minimumPhase = phaseModeParam->load() > 0.5f;
 
     parameters.bandListen = bandListenParam->load() > 0.5f;
     parameters.listenFrequencyHz = bandListenFrequency.load();
