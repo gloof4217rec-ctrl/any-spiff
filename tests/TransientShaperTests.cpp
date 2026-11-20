@@ -330,3 +330,37 @@ TEST_CASE ("Extreme settings stay finite and bounded", "[dsp]")
     CHECK (peak < 100.0f);
 }
 
+TEST_CASE ("Sensitivity curve weakens the cut", "[dsp]")
+{
+    const auto input = makeClickySignal (48000);
+
+    auto flatOutput = input;
+    {
+        AdaptiveTransientShaper shaper;
+        shaper.prepare (testSampleRate);
+        processInBlocks (shaper, flatOutput, makeActiveCutParameters());
+    }
+
+    auto attenuatedOutput = input;
+    {
+        AdaptiveTransientShaper shaper;
+        shaper.prepare (testSampleRate);
+
+        auto parameters = makeActiveCutParameters();
+        for (auto& band : parameters.curve.bands)
+            band.gainDb = -12.0f;
+
+        processInBlocks (shaper, attenuatedOutput, parameters);
+    }
+
+    constexpr int clickSample = 12000;
+    const auto clickBefore = rms (input, clickSample, 2048);
+    const auto clickFlat = rms (flatOutput, clickSample + latencySamples, 2048);
+    const auto clickAttenuated = rms (attenuatedOutput, clickSample + latencySamples, 2048);
+
+    // Both curves cut the click, but the attenuated curve cuts less.
+    CHECK (clickFlat < 0.85f * clickBefore);
+    CHECK (clickAttenuated > clickFlat);
+}
+
+

@@ -1,0 +1,82 @@
+#pragma once
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+#include "PluginProcessor.h"
+#include "dsp/SensitivityCurve.h"
+
+/** The sensitivity graph: draws the detector weighting curve and lets the user
+    drag three band nodes (frequency x gain) plus the lo/hi cut handles.
+
+    Alt-dragging a band node temporarily enables band listen, so the user hears
+    only the delta signal in that band while hunting for a frequency.
+*/
+class SensitivityCurveComponent : public juce::Component
+{
+public:
+    explicit SensitivityCurveComponent (PluginProcessor& processor);
+    ~SensitivityCurveComponent() override;
+
+    void paint (juce::Graphics&) override;
+
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
+
+private:
+    enum class DragTarget
+    {
+        none,
+        band,
+        loCut,
+        hiCut
+    };
+
+    struct BandIds
+    {
+        const char* freq;
+        const char* gain;
+        const char* q;
+        const char* type;
+        const char* on;
+    };
+
+    static constexpr std::array<BandIds, 3> bandIds
+    {
+        { { "band1_freq", "band1_gain", "band1_q", "band1_type", "band1_on" },
+          { "band2_freq", "band2_gain", "band2_q", "band2_type", "band2_on" },
+          { "band3_freq", "band3_gain", "band3_q", "band3_type", "band3_on" } }
+    };
+
+    juce::Rectangle<int> getPlotBounds() const;
+
+    float frequencyToX (float hz) const;
+    float xToFrequency (float x) const;
+    float gainToY (float db) const;
+    float yToGain (float y) const;
+
+    float readParameter (const char* id) const;
+    void writeParameter (const char* id, float value);
+
+    sensitivity::Parameters currentCurve() const;
+    void drawCurve (juce::Graphics&, const sensitivity::Parameters&, double sampleRate);
+    void drawNodes (juce::Graphics&, const sensitivity::Parameters&);
+
+    DragTarget findDragTarget (const juce::Point<int>& position, int& bandIndex) const;
+
+    PluginProcessor& processor;
+
+    DragTarget dragTarget = DragTarget::none;
+    int dragBand = -1;
+    bool listening = false;
+
+    static constexpr float frequencyMinHz = 20.0f;
+    static constexpr float frequencyMaxHz = 20000.0f;
+    static constexpr float gainMinDb = -24.0f;
+    static constexpr float gainMaxDb = 12.0f;
+    static constexpr float nodeRadius = 6.0f;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SensitivityCurveComponent)
+};

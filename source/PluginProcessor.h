@@ -41,6 +41,12 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    /** Message-thread hooks used by the sensitivity graph while Alt-dragging a
+        band node (band listen). The audio thread only reads the atomics.
+    */
+    void beginBandListen (float frequencyHz, float q);
+    void endBandListen();
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -61,6 +67,30 @@ private:
     std::atomic<float>* trimParam = nullptr;
     std::atomic<float>* deltaParam = nullptr;
     std::atomic<float>* bypassParam = nullptr;
+
+    std::atomic<float>* bandListenParam = nullptr;
+    std::atomic<float>* band1FreqParam = nullptr;
+    std::atomic<float>* band1GainParam = nullptr;
+    std::atomic<float>* band1QParam = nullptr;
+    std::atomic<float>* band1TypeParam = nullptr;
+    std::atomic<float>* band1OnParam = nullptr;
+    std::atomic<float>* band2FreqParam = nullptr;
+    std::atomic<float>* band2GainParam = nullptr;
+    std::atomic<float>* band2QParam = nullptr;
+    std::atomic<float>* band2TypeParam = nullptr;
+    std::atomic<float>* band2OnParam = nullptr;
+    std::atomic<float>* band3FreqParam = nullptr;
+    std::atomic<float>* band3GainParam = nullptr;
+    std::atomic<float>* band3QParam = nullptr;
+    std::atomic<float>* band3TypeParam = nullptr;
+    std::atomic<float>* band3OnParam = nullptr;
+    std::atomic<float>* loCutFreqParam = nullptr;
+    std::atomic<float>* loCutSlopeParam = nullptr;
+    std::atomic<float>* hiCutFreqParam = nullptr;
+    std::atomic<float>* hiCutSlopeParam = nullptr;
+
+    std::atomic<float> bandListenFrequency { 1000.0f };
+    std::atomic<float> bandListenQ { 1.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };

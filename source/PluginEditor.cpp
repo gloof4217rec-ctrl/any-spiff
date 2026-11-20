@@ -1,7 +1,7 @@
 #include "PluginEditor.h"
 
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (&p), processorRef (p)
+    : AudioProcessorEditor (&p), processorRef (p), sensitivityGraph (p)
 {
     addSlider ("depth", "Depth");
     addSlider ("sensitivity", "Sensitivity");
@@ -22,6 +22,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     deltaAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processorRef.apvts, "delta", deltaButton);
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processorRef.apvts, "bypass", bypassButton);
 
+    addAndMakeVisible (sensitivityGraph);
+    sensitivityGraph.setName ("sensitivity_graph");
     addAndMakeVisible (inspectButton);
 
     // this chunk of code instantiates and opens the melatonin inspector
@@ -36,8 +38,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     };
 
     setResizable (true, true);
-    setResizeLimits (600, 400, 1000, 700);
-    setSize (700, 460);
+    setResizeLimits (640, 520, 1200, 900);
+    setSize (760, 580);
 }
 
 PluginEditor::~PluginEditor()
@@ -118,12 +120,19 @@ void PluginEditor::paint (juce::Graphics& g)
 void PluginEditor::resized()
 {
     auto area = getLocalBounds().reduced (12);
-    area.removeFromTop (46);    // title
-    area.removeFromBottom (30); // inspector button
+    area.removeFromTop (46);     // title
+    sensitivityGraph.setBounds (area.removeFromTop (150));
+    area.removeFromTop (12);
+
+    inspectButton.setBounds (area.removeFromBottom (24).removeFromRight (120));
+    area.removeFromBottom (30);
+
+    auto switches = area.removeFromBottom (46);
+    area.removeFromBottom (12);
 
     constexpr int columns = 5;
     const auto cellWidth = area.getWidth() / columns;
-    const auto cellHeight = juce::jlimit (80, 130, area.getHeight() / 3);
+    const auto cellHeight = juce::jlimit (70, 120, area.getHeight() / 2);
 
     auto row = area.removeFromTop (cellHeight);
 
@@ -140,10 +149,6 @@ void PluginEditor::resized()
         control.label.setBounds (cell.removeFromTop (18));
         control.slider.setBounds (cell.reduced (4));
     }
-
-    area.removeFromTop (12);
-
-    auto switches = area.removeFromTop (46);
 
     const auto comboWidth = juce::jmin (160, switches.getWidth() / 4);
 
@@ -162,6 +167,4 @@ void PluginEditor::resized()
     deltaButton.setBounds (switches.removeFromLeft (80).withSizeKeepingCentre (80, 24));
     switches.removeFromLeft (8);
     bypassButton.setBounds (switches.removeFromLeft (80).withSizeKeepingCentre (80, 24));
-
-    inspectButton.setBounds (area.removeFromBottom (24).removeFromRight (120));
 }

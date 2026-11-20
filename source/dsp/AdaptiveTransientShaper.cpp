@@ -97,6 +97,13 @@ void AdaptiveTransientShaper::reset()
 
     hopCounter = 0;
 
+    weight.fill (1.0f);
+    curveCached = false;
+    lastListenFrequencyHz = -1.0f;
+    lastListenQ = -1.0f;
+    listenZ1.fill (0.0f);
+    listenZ2.fill (0.0f);
+
     depthSmoothed.setCurrentAndTargetValue (0.0f);
     mixSmoothed.setCurrentAndTargetValue (1.0f);
     trimSmoothed.setCurrentAndTargetValue (1.0f);
@@ -114,31 +121,55 @@ void AdaptiveTransientShaper::updateBlockCoefficients (const TransientShaperPara
     const auto decay = juce::jlimit (0.0f, 10.0f, parameters.decay);
     const auto lfHf = juce::jlimit (0.0f, 1.0f, parameters.decayLfHf);
 
-    if (std::abs (decay - lastDecay) < 1.0e-4f && std::abs (lfHf - lastDecayLfHf) < 1.0e-4f)
-        return;
-
-    lastDecay = decay;
-    lastDecayLfHf = lfHf;
-
-    const auto hopSeconds = (double) hopSize / sampleRate;
-
-    // Decay 0..10 maps to a 10 ms .. 640 ms release of the transient amount.
-    const auto decayMs = 10.0 * std::pow (2.0, 0.6 * (double) decay);
-
-    // Decay LF/HF tilts the release time between 20 Hz and 20 kHz.
-    const auto tilt = (double) lfHf - 0.5;
-    const auto logLowFactor = std::log2 (std::pow (4.0, tilt));
-    const auto logRange = std::log2 ((double) highestFrequency / (double) lowestFrequency);
-
-    for (int bin = 0; bin < numBins; ++bin)
+    if (std::abs (decay - lastDecay) >= 1.0e-4f || std::abs (lfHf - lastDecayLfHf) >= 1.0e-4f)
     {
-        const auto frequency = juce::jmax ((double) lowestFrequency,
-                                          sampleRate * 0.5 * (double) bin / (double) (numBins - 1));
-        const auto position = juce::jlimit (0.0, 1.0, std::log2 (frequency / (double) lowestFrequency) / logRange);
-        const auto factor = std::exp2 (logLowFactor * (1.0 - 2.0 * position));
-        const auto releaseMs = juce::jlimit (1.0, 2000.0, decayMs * factor);
+        lastDecay = decay;
+        lastDecayLfHf = lfHf;
 
-        releaseCoef[(size_t) bin] = (float) (1.0 - std::exp (-hopSeconds * 1000.0 / releaseMs));
+        const auto hopSeconds = (double) hopSize / sampleRate;
+
+        // Decay 0..10 maps to a 10 ms .. 640 ms release of the transient amount.
+        const auto decayMs = 10.0 * std::pow (2.0, 0.6 * (double) decay);
+
+        // Decay LF/HF tilts the release time between 20 Hz and 20 kHz.
+        const auto tilt = (double) lfHf - 0.5;
+        const auto logLowFactor = std::log2 (std::pow (4.0, tilt));
+        const auto logRange = std::log2 ((double) highestFrequency / (double) lowestFrequency);
+
+        for (int bin = 0; bin < numBins; ++bin)
+        {
+            const auto frequency = juce::jmax ((double) lowestFrequency,
+                                               sampleRate * 0.5 * (double) bin / (double) (numBins - 1));
+            const auto position = juce::jlimit (0.0, 1.0, std::log2 (frequency / (double) lowestFrequency) / logRange);
+            const auto factor = std::exp2 (logLowFactor * (1.0 - 2.0 * position));
+            const auto releaseMs = juce::jlimit (1.0, 2000.0, decayMs * factor);
+
+            releaseCoef[(size_t) bin] = (float) (1.0 - std::exp (-hopSeconds * 1000.0 / releaseMs));
+        }
+    }
+
+    // The sensitivity curve is only recomputed when a band or cut moves.
+    if (! curveCached || ! (parameters.curve == lastCurve))
+    {
+        lastCurve = parameters.curve;
+        curveCached = true;
+        sensitivity::computeWeights (parameters.curve, sampleRate, numBins, weight.data());
+    }
+
+    // The band-listen bandpass only changes when the listened band moves.
+    const auto listenFrequency = juce::jlimit (lowestFrequency, (float) (sampleRate * 0.5), parameters.listenFrequencyHz);
+    const auto listenQ = juce::jlimit (0.1f, 10.0f, parameters.listenQ);
+
+    if (std::abs (listenFrequency - lastListenFrequencyHz) > 1.0e-3f
+        || std::abs (listenQ - lastListenQ) > 1.0e-3f)
+    {
+        lastListenFrequencyHz = listenFrequency;
+        lastListenQ = listenQ;
+        listenBiquad = sensitivity::makeBandpass (listenFrequency, listenQ, sampleRate);
+
+        // Drop the filter history so a coefficient jump cannot ring.
+        listenZ1.fill (0.0f);
+        listenZ2.fill (0.0f);
     }
 }
 
@@ -220,7 +251,7 @@ void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float de
 
     for (int bin = 0; bin < numBins; ++bin)
     {
-        const auto amount = channel.amount[(size_t) bin] * depth;
+        const auto amount = channel.amount[(size_t) bin] * depth * weight[(size_t) bin];
         const auto gain = boost ? 1.0f + amount * boostGainAmount
                                 : juce::jmax (0.0f, 1.0f - amount);
 
@@ -349,15 +380,31 @@ void AdaptiveTransientShaper::process (juce::AudioBuffer<float>& buffer, const T
         const auto wetLeftTrimmed = wetLeft * trim;
         const auto wetRightTrimmed = wetRight * trim;
 
-        const auto targetLeft = parameters.delta ? wetLeftTrimmed - dryLeft : wetLeftTrimmed;
-        const auto targetRight = parameters.delta ? wetRightTrimmed - dryRight : wetRightTrimmed;
+        float outputLeft = 0.0f;
+        float outputRight = 0.0f;
 
-        auto outputLeft = dryLeft + mix * (targetLeft - dryLeft);
-        auto outputRight = dryRight + mix * (targetRight - dryRight);
+        if (parameters.bandListen)
+        {
+            // Band listen: hear only the delta inside the listened band. This
+            // overrides mix/delta/bypass so the user can hunt for frequencies.
+            const auto deltaLeft = wetLeftTrimmed - dryLeft;
+            const auto deltaRight = wetRightTrimmed - dryRight;
 
-        // Soft bypass: crossfade back to the (latency matched) dry signal.
-        outputLeft = dryLeft + active * (outputLeft - dryLeft);
-        outputRight = dryRight + active * (outputRight - dryRight);
+            outputLeft = listenBiquad.processSample (deltaLeft, listenZ1[0], listenZ2[0]);
+            outputRight = listenBiquad.processSample (deltaRight, listenZ1[1], listenZ2[1]);
+        }
+        else
+        {
+            const auto targetLeft = parameters.delta ? wetLeftTrimmed - dryLeft : wetLeftTrimmed;
+            const auto targetRight = parameters.delta ? wetRightTrimmed - dryRight : wetRightTrimmed;
+
+            outputLeft = dryLeft + mix * (targetLeft - dryLeft);
+            outputRight = dryRight + mix * (targetRight - dryRight);
+
+            // Soft bypass: crossfade back to the (latency matched) dry signal.
+            outputLeft = dryLeft + active * (outputLeft - dryLeft);
+            outputRight = dryRight + active * (outputRight - dryRight);
+        }
 
         if (isMidSide)
         {

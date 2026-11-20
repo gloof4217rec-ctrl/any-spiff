@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "BinaryData.h"
 #include "melatonin_inspector/melatonin_inspector.h"
+#include "SensitivityCurveComponent.h"
 
 //==============================================================================
 /** The plugin window: nine rotary controls plus mode/stereo switches.
@@ -41,6 +42,8 @@ private:
     juce::TextButton inspectButton { "Inspect the UI" };
 
     juce::OwnedArray<SliderControl> sliderControls;
+
+    SensitivityCurveComponent sensitivityGraph;
 
     juce::ComboBox modeBox;
     juce::ComboBox stereoModeBox;

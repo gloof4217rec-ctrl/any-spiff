@@ -67,6 +67,13 @@ TEST_CASE ("Editor shows every parameter")
             ++numToggles;
 
     REQUIRE (numToggles == 2);
+
+    // The sensitivity graph is present and laid out.
+    auto* graph = dynamic_cast<SensitivityCurveComponent*> (findChildByName (editor, "sensitivity_graph"));
+    REQUIRE (graph != nullptr);
+    REQUIRE (graph->isVisible());
+    REQUIRE (graph->getWidth() > 0);
+    REQUIRE (graph->getHeight() > 0);
 }
 
 TEST_CASE ("Editor controls follow the parameters")
@@ -108,7 +115,7 @@ TEST_CASE ("Editor respects its size limits")
     EditorFixture fixture;
     auto& editor = fixture.get();
 
-    REQUIRE (editor.getWidth() == 700);
-    REQUIRE (editor.getHeight() == 460);
+    REQUIRE (editor.getWidth() == 760);
+    REQUIRE (editor.getHeight() == 580);
     REQUIRE (editor.isResizable());
 }

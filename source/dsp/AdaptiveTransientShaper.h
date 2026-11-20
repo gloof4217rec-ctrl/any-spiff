@@ -3,6 +3,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
 
+#include "dsp/SensitivityCurve.h"
+
 /** A snapshot of the user-facing controls, already converted to DSP-friendly units.
 
     The processor reads the APVTS atoms once per block and fills this in, so the
@@ -23,6 +25,11 @@ struct TransientShaperParameters
     bool bypass = false;      // soft bypass (the DSP keeps running)
     bool boost = false;       // boost transients instead of cutting them
     bool midSide = false;     // detect/process mid and side instead of left and right
+
+    sensitivity::Parameters curve;   // frequency-dependent detector weighting
+    bool bandListen = false;         // monitor only the delta inside the listened band
+    float listenFrequencyHz = 1000.0f;
+    float listenQ = 1.0f;
 };
 
 /** Adaptive, frequency-dependent transient shaper.
@@ -110,6 +117,18 @@ private:
     float slowReleaseCoef = 0.0f;
     float amountAttackCoef = 0.0f;
     std::array<float, numBins> releaseCoef {};
+
+    // Sensitivity curve: per-bin weight, rebuilt only when the curve moves.
+    std::array<float, numBins> weight {};
+    sensitivity::Parameters lastCurve;
+    bool curveCached = false;
+
+    // Band listen: a second-order bandpass on the delta path.
+    float lastListenFrequencyHz = -1.0f;
+    float lastListenQ = -1.0f;
+    sensitivity::Biquad listenBiquad;
+    std::array<float, maxChannels> listenZ1 {};
+    std::array<float, maxChannels> listenZ2 {};
 
     juce::SmoothedValue<float> depthSmoothed;
     juce::SmoothedValue<float> mixSmoothed;

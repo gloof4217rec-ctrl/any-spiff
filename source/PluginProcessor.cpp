@@ -98,6 +98,54 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
                                                       "Bypass",
                                                       false));
 
+
+    // --- Sensitivity graph: three bands plus lo/hi cuts. ---
+    const auto freqRange = [] { return NormalisableRange<float> (20.0f, 20000.0f, 1.0f, 0.3f); };
+    const auto gainRange = [] { return NormalisableRange<float> (-12.0f, 12.0f, 0.1f); };
+    const auto qRange = [] { return NormalisableRange<float> (0.1f, 10.0f, 0.01f); };
+
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "band_listen", versionHint },
+                                                       "Band Listen",
+                                                       false));
+
+    const StringArray bandTypes { "Parametric", "Low shelf", "High shelf", "Tilt shelf" };
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band1_freq", versionHint }, "Band 1 Freq", freqRange(), 100.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band1_gain", versionHint }, "Band 1 Gain", gainRange(), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band1_q", versionHint }, "Band 1 Q", qRange(), 0.7f));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "band1_type", versionHint }, "Band 1 Type", bandTypes, 0));
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "band1_on", versionHint }, "Band 1 On", true));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band2_freq", versionHint }, "Band 2 Freq", freqRange(), 1000.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band2_gain", versionHint }, "Band 2 Gain", gainRange(), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band2_q", versionHint }, "Band 2 Q", qRange(), 0.7f));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "band2_type", versionHint }, "Band 2 Type", bandTypes, 0));
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "band2_on", versionHint }, "Band 2 On", true));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band3_freq", versionHint }, "Band 3 Freq", freqRange(), 6000.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band3_gain", versionHint }, "Band 3 Gain", gainRange(), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "band3_q", versionHint }, "Band 3 Q", qRange(), 0.7f));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "band3_type", versionHint }, "Band 3 Type", bandTypes, 0));
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "band3_on", versionHint }, "Band 3 On", true));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "locut_freq", versionHint },
+                                                       "Lo Cut Freq",
+                                                       NormalisableRange<float> (20.0f, 2000.0f, 1.0f, 0.3f),
+                                                       20.0f));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "locut_slope", versionHint },
+                                                        "Lo Cut Slope",
+                                                        StringArray { "Off", "12 dB/oct", "24 dB/oct", "48 dB/oct" },
+                                                        0));
+
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "hicut_freq", versionHint },
+                                                       "Hi Cut Freq",
+                                                       NormalisableRange<float> (200.0f, 20000.0f, 1.0f, 0.3f),
+                                                       20000.0f));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "hicut_slope", versionHint },
+                                                        "Hi Cut Slope",
+                                                        StringArray { "Off", "12 dB/oct", "24 dB/oct", "48 dB/oct" },
+                                                        0));
+
     return layout;
 }
 
@@ -117,11 +165,40 @@ void PluginProcessor::cacheParameterPointers()
     deltaParam = apvts.getRawParameterValue ("delta");
     bypassParam = apvts.getRawParameterValue ("bypass");
 
+    bandListenParam = apvts.getRawParameterValue ("band_listen");
+    band1FreqParam = apvts.getRawParameterValue ("band1_freq");
+    band1GainParam = apvts.getRawParameterValue ("band1_gain");
+    band1QParam = apvts.getRawParameterValue ("band1_q");
+    band1TypeParam = apvts.getRawParameterValue ("band1_type");
+    band1OnParam = apvts.getRawParameterValue ("band1_on");
+    band2FreqParam = apvts.getRawParameterValue ("band2_freq");
+    band2GainParam = apvts.getRawParameterValue ("band2_gain");
+    band2QParam = apvts.getRawParameterValue ("band2_q");
+    band2TypeParam = apvts.getRawParameterValue ("band2_type");
+    band2OnParam = apvts.getRawParameterValue ("band2_on");
+    band3FreqParam = apvts.getRawParameterValue ("band3_freq");
+    band3GainParam = apvts.getRawParameterValue ("band3_gain");
+    band3QParam = apvts.getRawParameterValue ("band3_q");
+    band3TypeParam = apvts.getRawParameterValue ("band3_type");
+    band3OnParam = apvts.getRawParameterValue ("band3_on");
+    loCutFreqParam = apvts.getRawParameterValue ("locut_freq");
+    loCutSlopeParam = apvts.getRawParameterValue ("locut_slope");
+    hiCutFreqParam = apvts.getRawParameterValue ("hicut_freq");
+    hiCutSlopeParam = apvts.getRawParameterValue ("hicut_slope");
+
     jassert (modeParam != nullptr && depthParam != nullptr && sensitivityParam != nullptr
              && sharpnessParam != nullptr && decayParam != nullptr && decayLfHfParam != nullptr
              && stereoModeParam != nullptr && stereoLinkParam != nullptr && balanceParam != nullptr
              && mixParam != nullptr && trimParam != nullptr && deltaParam != nullptr
-             && bypassParam != nullptr);
+             && bypassParam != nullptr
+             && bandListenParam != nullptr && band1FreqParam != nullptr && band1GainParam != nullptr
+             && band1QParam != nullptr && band1TypeParam != nullptr && band1OnParam != nullptr
+             && band2FreqParam != nullptr && band2GainParam != nullptr && band2QParam != nullptr
+             && band2TypeParam != nullptr && band2OnParam != nullptr
+             && band3FreqParam != nullptr && band3GainParam != nullptr && band3QParam != nullptr
+             && band3TypeParam != nullptr && band3OnParam != nullptr
+             && loCutFreqParam != nullptr && loCutSlopeParam != nullptr
+             && hiCutFreqParam != nullptr && hiCutSlopeParam != nullptr);
 }
 
 //==============================================================================
@@ -260,7 +337,52 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     parameters.delta = deltaParam->load() > 0.5f;
     parameters.bypass = bypassParam->load() > 0.5f;
 
+    parameters.bandListen = bandListenParam->load() > 0.5f;
+    parameters.listenFrequencyHz = bandListenFrequency.load();
+    parameters.listenQ = bandListenQ.load();
+
+    auto& band1 = parameters.curve.bands[0];
+    band1.frequencyHz = band1FreqParam->load();
+    band1.gainDb = band1GainParam->load();
+    band1.q = band1QParam->load();
+    band1.type = (int) band1TypeParam->load();
+    band1.enabled = band1OnParam->load() > 0.5f;
+
+    auto& band2 = parameters.curve.bands[1];
+    band2.frequencyHz = band2FreqParam->load();
+    band2.gainDb = band2GainParam->load();
+    band2.q = band2QParam->load();
+    band2.type = (int) band2TypeParam->load();
+    band2.enabled = band2OnParam->load() > 0.5f;
+
+    auto& band3 = parameters.curve.bands[2];
+    band3.frequencyHz = band3FreqParam->load();
+    band3.gainDb = band3GainParam->load();
+    band3.q = band3QParam->load();
+    band3.type = (int) band3TypeParam->load();
+    band3.enabled = band3OnParam->load() > 0.5f;
+
+    parameters.curve.loCutFrequencyHz = loCutFreqParam->load();
+    parameters.curve.loCutSlopeDbPerOctave = (int) loCutSlopeParam->load() * 12;
+    parameters.curve.hiCutFrequencyHz = hiCutFreqParam->load();
+    parameters.curve.hiCutSlopeDbPerOctave = (int) hiCutSlopeParam->load() * 12;
+
     transientShaper.process (buffer, parameters);
+}
+
+void PluginProcessor::beginBandListen (float frequencyHz, float q)
+{
+    bandListenFrequency.store (frequencyHz);
+    bandListenQ.store (q);
+
+    if (auto* param = apvts.getParameter ("band_listen"))
+        param->setValueNotifyingHost (1.0f);
+}
+
+void PluginProcessor::endBandListen()
+{
+    if (auto* param = apvts.getParameter ("band_listen"))
+        param->setValueNotifyingHost (0.0f);
 }
 
 //==============================================================================
