@@ -80,6 +80,10 @@ TEST_CASE ("Editor shows every parameter")
     REQUIRE (phaseCombo != nullptr);
     REQUIRE (phaseCombo->getNumItems() == 2);
 
+    auto* windowCombo = dynamic_cast<juce::ComboBox*> (findChildByName (editor, "window"));
+    REQUIRE (windowCombo != nullptr);
+    REQUIRE (windowCombo->getNumItems() == 3);
+
     // Two toggles, found by their text rather than by ID.
     int numToggles = 0;
 

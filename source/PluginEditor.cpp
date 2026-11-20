@@ -18,6 +18,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     setUpCombo (resolutionBox, resolutionLabel, "resolution", "Resolution", resolutionAttachment);
     setUpCombo (oversampleBox, oversampleLabel, "oversample", "Oversample", oversampleAttachment);
     setUpCombo (phaseBox, phaseLabel, "phase_mode", "Phase", phaseAttachment);
+    setUpCombo (windowBox, windowLabel, "window", "Window", windowAttachment);
 
     addAndMakeVisible (deltaButton);
     addAndMakeVisible (bypassButton);
@@ -174,22 +175,28 @@ void PluginEditor::resized()
     switches.removeFromLeft (8);
     bypassButton.setBounds (switches.removeFromLeft (80).withSizeKeepingCentre (80, 24));
 
-    // Advanced row: resolution, oversample, phase mode.
-    const auto advancedComboWidth = juce::jmin (150, advancedRow.getWidth() / 3);
+    // Advanced row: resolution, oversample, phase mode, window.
+    const auto advancedComboWidth = juce::jmin (140, advancedRow.getWidth() / 4);
 
     auto resolutionArea = advancedRow.removeFromLeft (advancedComboWidth);
     resolutionLabel.setBounds (resolutionArea.removeFromTop (16));
     resolutionBox.setBounds (resolutionArea.removeFromTop (26));
 
-    advancedRow.removeFromLeft (10);
+    advancedRow.removeFromLeft (8);
 
     auto oversampleArea = advancedRow.removeFromLeft (advancedComboWidth);
     oversampleLabel.setBounds (oversampleArea.removeFromTop (16));
     oversampleBox.setBounds (oversampleArea.removeFromTop (26));
 
-    advancedRow.removeFromLeft (10);
+    advancedRow.removeFromLeft (8);
 
     auto phaseArea = advancedRow.removeFromLeft (advancedComboWidth);
     phaseLabel.setBounds (phaseArea.removeFromTop (16));
     phaseBox.setBounds (phaseArea.removeFromTop (26));
+
+    advancedRow.removeFromLeft (8);
+
+    auto windowArea = advancedRow.removeFromLeft (advancedComboWidth);
+    windowLabel.setBounds (windowArea.removeFromTop (16));
+    windowBox.setBounds (windowArea.removeFromTop (26));
 }

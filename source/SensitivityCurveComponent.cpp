@@ -153,7 +153,7 @@ void SensitivityCurveComponent::paint (juce::Graphics& g)
 void SensitivityCurveComponent::drawReduction (juce::Graphics& g, const sensitivity::Parameters&, double sampleRate)
 {
     const auto plot = getPlotBounds();
-    const auto numBins = (int) reduction.size();
+    const auto numBins = processor.getNumBins();
 
     if (numBins < 2)
         return;

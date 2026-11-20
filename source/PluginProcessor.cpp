@@ -161,6 +161,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
                                                         StringArray { "Linear", "Minimum" },
                                                         0));
 
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "window", versionHint },
+                                                        "Window",
+                                                        StringArray { "Short", "Medium", "Long" },
+                                                        1));
+
     return layout;
 }
 
@@ -182,6 +187,7 @@ void PluginProcessor::cacheParameterPointers()
     resolutionParam = apvts.getRawParameterValue ("resolution");
     oversampleParam = apvts.getRawParameterValue ("oversample");
     phaseModeParam = apvts.getRawParameterValue ("phase_mode");
+    windowParam = apvts.getRawParameterValue ("window");
 
     bandListenParam = apvts.getRawParameterValue ("band_listen");
     band1FreqParam = apvts.getRawParameterValue ("band1_freq");
@@ -212,6 +218,7 @@ void PluginProcessor::cacheParameterPointers()
              && resolutionParam != nullptr
              && oversampleParam != nullptr
              && phaseModeParam != nullptr
+             && windowParam != nullptr
              && bandListenParam != nullptr && band1FreqParam != nullptr && band1GainParam != nullptr
              && band1QParam != nullptr && band1TypeParam != nullptr && band1OnParam != nullptr
              && band2FreqParam != nullptr && band2GainParam != nullptr && band2QParam != nullptr
@@ -367,6 +374,9 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     parameters.minimumPhase = phaseModeParam->load() > 0.5f;
 
+    const auto windowIndex = juce::jlimit (0, 2, (int) windowParam->load());
+    parameters.windowSize = 512 << windowIndex;   // short=512, medium=1024, long=2048
+
     parameters.bandListen = bandListenParam->load() > 0.5f;
     parameters.listenFrequencyHz = bandListenFrequency.load();
     parameters.listenQ = bandListenQ.load();
@@ -424,7 +434,7 @@ void PluginProcessor::endBandListen()
         param->setValueNotifyingHost (0.0f);
 }
 
-void PluginProcessor::getReductionSnapshot (std::array<float, AdaptiveTransientShaper::numBins>& destination) const
+void PluginProcessor::getReductionSnapshot (std::array<float, AdaptiveTransientShaper::maxNumBins>& destination) const
 {
     transientShaper.copyReduction (destination);
 }

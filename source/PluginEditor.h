@@ -50,11 +50,13 @@ private:
     juce::ComboBox resolutionBox;
     juce::ComboBox oversampleBox;
     juce::ComboBox phaseBox;
+    juce::ComboBox windowBox;
     juce::Label modeLabel;
     juce::Label stereoModeLabel;
     juce::Label resolutionLabel;
     juce::Label oversampleLabel;
     juce::Label phaseLabel;
+    juce::Label windowLabel;
 
     juce::ToggleButton deltaButton { "Delta" };
     juce::ToggleButton bypassButton { "Bypass" };
@@ -64,6 +66,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> resolutionAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> oversampleAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> phaseAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> windowAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> deltaAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
 

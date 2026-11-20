@@ -48,7 +48,10 @@ public:
     void endBandListen();
 
     /** Copies the current per-bin processing amount (0..1) for the reduction graph. */
-    void getReductionSnapshot (std::array<float, AdaptiveTransientShaper::numBins>& destination) const;
+    void getReductionSnapshot (std::array<float, AdaptiveTransientShaper::maxNumBins>& destination) const;
+
+    /** The number of active detector bins (depends on the Window parameter). */
+    int getNumBins() const noexcept { return transientShaper.getNumBins(); }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -73,6 +76,7 @@ private:
     std::atomic<float>* resolutionParam = nullptr;
     std::atomic<float>* oversampleParam = nullptr;
     std::atomic<float>* phaseModeParam = nullptr;
+    std::atomic<float>* windowParam = nullptr;
 
     std::atomic<float>* bandListenParam = nullptr;
     std::atomic<float>* band1FreqParam = nullptr;

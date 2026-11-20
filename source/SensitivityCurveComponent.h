@@ -72,7 +72,7 @@ private:
 
     PluginProcessor& processor;
 
-    std::array<float, AdaptiveTransientShaper::numBins> reduction {};
+    std::array<float, AdaptiveTransientShaper::maxNumBins> reduction {};
 
     DragTarget dragTarget = DragTarget::none;
     int dragBand = -1;

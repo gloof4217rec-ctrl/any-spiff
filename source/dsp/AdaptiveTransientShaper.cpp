@@ -19,6 +19,7 @@ namespace
 //==============================================================================
 AdaptiveTransientShaper::AdaptiveTransientShaper()
 {
+    fft = std::make_unique<juce::dsp::FFT> (fftOrder);
     calibrateFftScale();
 }
 
@@ -26,11 +27,11 @@ void AdaptiveTransientShaper::calibrateFftScale()
 {
     // The engines behind juce::dsp::FFT normalise the inverse transform, but measuring
     // the round trip once keeps us honest if that ever changes.
-    std::vector<float> work ((size_t) 2 * fftSize, 0.0f);
+    std::vector<float> work ((size_t) (2 * fftSize), 0.0f);
     work[0] = 1.0f;
 
-    fft.performRealOnlyForwardTransform (work.data());
-    fft.performRealOnlyInverseTransform (work.data());
+    fft->performRealOnlyForwardTransform (work.data());
+    fft->performRealOnlyInverseTransform (work.data());
 
     const auto roundTrip = std::abs (work[0]);
     synthesisScale = roundTrip > 1.0e-6f ? 1.0f / (overlapGain * roundTrip) : 1.0f / overlapGain;
@@ -103,6 +104,24 @@ void AdaptiveTransientShaper::applyOversamplingFactor (int factor)
     configureDsp (baseSampleRate * (double) factor);
 }
 
+void AdaptiveTransientShaper::applyWindowSize (int windowSize)
+{
+    windowSize = windowSize == 512 ? 512 : windowSize == 2048 ? 2048 : 1024;
+
+    if (windowSize == fftSize)
+        return;
+
+    fftSize = windowSize;
+    fftOrder = windowSize == 512 ? 9 : windowSize == 2048 ? 11 : 10;
+    hopSize = fftSize / 4;
+    numBins = fftSize / 2 + 1;
+
+    fft = std::make_unique<juce::dsp::FFT> (fftOrder);
+    calibrateFftScale();
+
+    configureDsp (baseSampleRate * (double) currentOversamplingFactor.load());
+}
+
 void AdaptiveTransientShaper::reset()
 {
     for (auto& channel : channels)
@@ -149,10 +168,13 @@ void AdaptiveTransientShaper::reset()
     activeSmoothed.setCurrentAndTargetValue (1.0f);
 }
 
-void AdaptiveTransientShaper::copyReduction (std::array<float, numBins>& destination) const noexcept
+void AdaptiveTransientShaper::copyReduction (std::array<float, maxNumBins>& destination) const noexcept
 {
     for (int bin = 0; bin < numBins; ++bin)
         destination[(size_t) bin] = reductionAmount[(size_t) bin].load();
+
+    for (int bin = numBins; bin < maxNumBins; ++bin)
+        destination[(size_t) bin] = 0.0f;
 }
 
 //==============================================================================
@@ -246,7 +268,7 @@ void AdaptiveTransientShaper::transformChannel (ChannelState& channel)
 
     std::fill (channel.fftWork.begin() + fftSize, channel.fftWork.end(), 0.0f);
 
-    fft.performRealOnlyForwardTransform (channel.fftWork.data());
+    fft->performRealOnlyForwardTransform (channel.fftWork.data());
 }
 
 void AdaptiveTransientShaper::detectChannel (ChannelState& channel)
@@ -289,7 +311,7 @@ void AdaptiveTransientShaper::applySharpness (ChannelState& channel, float sharp
                                           + 0.50f * channel.amount[(size_t) bin]
                                           + 0.25f * channel.amount[(size_t) (bin + 1)];
 
-        std::copy (channel.scratch.begin(), channel.scratch.end(), channel.amount.begin());
+        std::copy (channel.scratch.begin(), channel.scratch.begin() + numBins, channel.amount.begin());
     }
 }
 
@@ -334,7 +356,7 @@ void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float de
         }
     }
 
-    fft.performRealOnlyInverseTransform (channel.fftWork.data());
+    fft->performRealOnlyInverseTransform (channel.fftWork.data());
 
     for (int i = 0; i < fftSize; ++i)
         channel.overlap[(size_t) i] += channel.fftWork[(size_t) i] * window[(size_t) i] * synthesisScale;
@@ -347,7 +369,8 @@ void AdaptiveTransientShaper::synthesiseChannel (ChannelState& channel, float de
 
     std::memmove (channel.overlap.data(), channel.overlap.data() + hopSize,
                   (size_t) (fftSize - hopSize) * sizeof (float));
-    std::fill (channel.overlap.end() - hopSize, channel.overlap.end(), 0.0f);
+    std::fill (channel.overlap.begin() + (fftSize - hopSize),
+               channel.overlap.begin() + fftSize, 0.0f);
 }
 
 void AdaptiveTransientShaper::applyMinimumPhase (ChannelState& channel)
@@ -363,10 +386,10 @@ void AdaptiveTransientShaper::applyMinimumPhase (ChannelState& channel)
     }
 
     // Real cepstrum of the log-magnitude.
-    fft.performRealOnlyInverseTransform (minPhaseWork.data());
+    fft->performRealOnlyInverseTransform (minPhaseWork.data());
 
     // Fold into a causal sequence.
-    std::array<float, 2 * fftSize> folded {};
+    std::array<float, 2 * maxFftSize> folded {};
     folded[0] = minPhaseWork[0];
 
     for (int n = 1; n < fftSize / 2; ++n)
@@ -375,7 +398,7 @@ void AdaptiveTransientShaper::applyMinimumPhase (ChannelState& channel)
     folded[(size_t) (fftSize / 2)] = minPhaseWork[(size_t) (fftSize / 2)];
 
     // H_min = exp(FFT(folded)).
-    fft.performRealOnlyForwardTransform (folded.data());
+    fft->performRealOnlyForwardTransform (folded.data());
 
     // Apply H_min to the frame spectrum.
     for (int k = 0; k < fftSize; ++k)
@@ -449,6 +472,9 @@ void AdaptiveTransientShaper::processFrame (const TransientShaperParameters& par
 //==============================================================================
 void AdaptiveTransientShaper::process (juce::AudioBuffer<float>& buffer, const TransientShaperParameters& parameters)
 {
+    if (parameters.windowSize != fftSize)
+        applyWindowSize (parameters.windowSize);
+
     auto factor = parameters.oversamplingFactor;
     factor = factor == 2 ? 2 : factor == 4 ? 4 : factor == 8 ? 8 : 1;
 

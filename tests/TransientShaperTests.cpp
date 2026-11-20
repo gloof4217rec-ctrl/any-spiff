@@ -7,7 +7,7 @@
 namespace
 {
     constexpr double testSampleRate = 48000.0;
-    constexpr int latencySamples = AdaptiveTransientShaper::fftSize;
+    constexpr int latencySamples = 1024;
 
     void processInBlocks (AdaptiveTransientShaper& shaper,
                           juce::AudioBuffer<float>& buffer,
@@ -371,7 +371,7 @@ TEST_CASE ("Reduction snapshot reports active bins", "[dsp]")
     auto output = makeClickySignal (48000);
     const auto parameters = makeActiveCutParameters();
 
-    std::array<float, AdaptiveTransientShaper::numBins> snapshot {};
+    std::array<float, AdaptiveTransientShaper::maxNumBins> snapshot {};
     float peakReduction = 0.0f;
 
     for (int start = 0; start < output.getNumSamples(); start += 256)
@@ -396,7 +396,7 @@ TEST_CASE ("Reduction snapshot is silent at zero depth", "[dsp]")
     auto output = makeClickySignal (24000);
     TransientShaperParameters parameters; // depth 0
 
-    std::array<float, AdaptiveTransientShaper::numBins> snapshot {};
+    std::array<float, AdaptiveTransientShaper::maxNumBins> snapshot {};
     float peakReduction = 0.0f;
 
     for (int start = 0; start < output.getNumSamples(); start += 256)
@@ -500,5 +500,37 @@ TEST_CASE ("Minimum phase mode stays finite and still processes", "[dsp]")
         CHECK (clickAfter < 0.95f * clickBefore);
     }
 }
+TEST_CASE ("All window sizes stay finite and still process", "[dsp]")
+{
+    const auto input = makeClickySignal (24000);
+
+    for (const auto windowSize : { 512, 1024, 2048 })
+    {
+        AdaptiveTransientShaper shaper;
+        shaper.prepare (testSampleRate);
+
+        auto output = input;
+        auto parameters = makeActiveCutParameters();
+        parameters.windowSize = windowSize;
+        processInBlocks (shaper, output, parameters);
+
+        CHECK (shaper.getFftSize() == windowSize);
+
+        const auto latency = shaper.getLatencySamples();
+
+        auto allFinite = true;
+
+        for (int channel = 0; channel < output.getNumChannels(); ++channel)
+            for (int sample = 0; sample < output.getNumSamples(); ++sample)
+                allFinite = allFinite && std::isfinite (output.getSample (channel, sample));
+
+        CHECK (allFinite);
+
+        const auto clickBefore = rms (input, 12000, 2048);
+        const auto clickAfter = rms (output, 12000 + latency, 2048);
+        CHECK (clickAfter < 0.95f * clickBefore);
+    }
+}
+
 
 

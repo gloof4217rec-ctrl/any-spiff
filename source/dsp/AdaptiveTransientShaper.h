@@ -30,6 +30,7 @@ struct TransientShaperParameters
     int resolutionHops = 1;   // detector updates every N hops (1/2/4 = high/medium/low)
     int oversamplingFactor = 1; // 1/2/4/8 = off/2x/4x/8x
     bool minimumPhase = false;  // false = linear (zero) phase, true = minimum phase
+    int windowSize = 1024;      // 512 / 1024 / 2048 (short / medium / long)
 
     sensitivity::Parameters curve;   // frequency-dependent detector weighting
     bool bandListen = false;         // monitor only the delta inside the listened band
@@ -51,10 +52,12 @@ struct TransientShaperParameters
 class AdaptiveTransientShaper
 {
 public:
-    static constexpr int fftOrder = 10;
-    static constexpr int fftSize = 1 << fftOrder;
-    static constexpr int hopSize = fftSize / 4;
-    static constexpr int numBins = fftSize / 2 + 1;
+    // Largest supported STFT size; buffers are sized to these and the runtime
+    // window simply uses a subset of them.
+    static constexpr int maxFftOrder = 11;
+    static constexpr int maxFftSize = 1 << maxFftOrder;
+    static constexpr int maxHopSize = maxFftSize / 4;
+    static constexpr int maxNumBins = maxFftSize / 2 + 1;
     static constexpr int maxChannels = 2;
 
     AdaptiveTransientShaper();
@@ -70,6 +73,10 @@ public:
     /** Processes the buffer in place. The output is delayed by getLatencySamples(). */
     void process (juce::AudioBuffer<float>& buffer, const TransientShaperParameters& parameters);
 
+    /** The current FFT size and bin count (depend on the Window parameter). */
+    int getFftSize() const noexcept { return fftSize; }
+    int getNumBins() const noexcept { return numBins; }
+
     /** The STFT latency (one full FFT frame) that must be reported to the host.
         Includes the oversampler delay when oversampling is active.
     */
@@ -84,30 +91,31 @@ public:
     }
 
     /** Copies the current per-bin processing amount (0..1) for the reduction
-        graph. Safe to call from the message thread.
+        graph. Safe to call from the message thread. Only the first getNumBins()
+        entries are filled; the rest are zeroed.
     */
-    void copyReduction (std::array<float, numBins>& destination) const noexcept;
+    void copyReduction (std::array<float, maxNumBins>& destination) const noexcept;
 
 private:
     struct ChannelState
     {
-        std::array<float, fftSize> inputRing {};     // last fftSize input samples
-        std::array<float, fftSize> dryRing {};       // dry signal, delayed by fftSize
-        std::array<float, 2 * fftSize> wetRing {};   // processed hops, primed with latency
-        std::array<float, fftSize> frame {};         // chronological analysis frame
-        std::array<float, 2 * fftSize> fftWork {};   // 2 * fftSize for real-only FFTs
-        std::array<float, numBins> magnitude {};
-        std::array<float, numBins> fastEnvelope {};
-        std::array<float, numBins> slowEnvelope {};
-        std::array<float, numBins> amount {};
-        std::array<float, numBins> scratch {};
-        std::array<float, numBins> gain {};
-        std::array<float, fftSize> overlap {};       // overlap-add accumulator
+        std::array<float, maxFftSize> inputRing {};     // last fftSize input samples
+        std::array<float, maxFftSize> dryRing {};       // dry signal, delayed by fftSize
+        std::array<float, 2 * maxFftSize> wetRing {};   // processed hops, primed with latency
+        std::array<float, maxFftSize> frame {};         // chronological analysis frame
+        std::array<float, 2 * maxFftSize> fftWork {};   // 2 * fftSize for real-only FFTs
+        std::array<float, maxNumBins> magnitude {};
+        std::array<float, maxNumBins> fastEnvelope {};
+        std::array<float, maxNumBins> slowEnvelope {};
+        std::array<float, maxNumBins> amount {};
+        std::array<float, maxNumBins> scratch {};
+        std::array<float, maxNumBins> gain {};
+        std::array<float, maxFftSize> overlap {};       // overlap-add accumulator
 
         int inputWrite = 0;
         int dryWrite = 0;
         int wetRead = 0;
-        int wetWrite = hopSize;                      // trails wetRead by one hop
+        int wetWrite = 0;                               // set to hopSize in reset()
         float drySample = 0.0f;
     };
 
@@ -118,19 +126,24 @@ private:
     void processFrame (const TransientShaperParameters& parameters, int numActiveChannels, bool updateDetector);
     void processBlock (float* const* channelData, int numChannels, int numSamples, const TransientShaperParameters& parameters);
     void applyOversamplingFactor (int factor);
+    void applyWindowSize (int windowSize);
     void configureDsp (double effectiveSampleRate);
     void updateBlockCoefficients (const TransientShaperParameters& parameters);
     void applySharpness (ChannelState& channel, float sharpness);
     float pushSample (ChannelState& channel, float input);
     void calibrateFftScale();
 
-    juce::dsp::FFT fft { fftOrder };
+    std::unique_ptr<juce::dsp::FFT> fft;
 
     std::array<ChannelState, maxChannels> channels;
-    std::array<float, fftSize> window {};
+    std::array<float, maxFftSize> window {};
 
     double sampleRate = 48000.0;
     double baseSampleRate = 48000.0;
+    int fftOrder = 10;
+    int fftSize = 1024;
+    int hopSize = 256;
+    int numBins = 513;
     int hopCounter = 0;
     int resolutionCounter = 0;
     float synthesisScale = 2.0f / 3.0f;
@@ -146,10 +159,10 @@ private:
     float slowAttackCoef = 0.0f;
     float slowReleaseCoef = 0.0f;
     float amountAttackCoef = 0.0f;
-    std::array<float, numBins> releaseCoef {};
+    std::array<float, maxNumBins> releaseCoef {};
 
     // Sensitivity curve: per-bin weight, rebuilt only when the curve moves.
-    std::array<float, numBins> weight {};
+    std::array<float, maxNumBins> weight {};
     sensitivity::Parameters lastCurve;
     bool curveCached = false;
 
@@ -162,10 +175,10 @@ private:
 
     // Per-bin processing amount published for the reduction graph. Written on
     // the audio thread (once per frame) and read by the message thread.
-    std::array<std::atomic<float>, numBins> reductionAmount {};
+    std::array<std::atomic<float>, maxNumBins> reductionAmount {};
 
     // Scratch for the cepstral minimum-phase reconstruction.
-    std::array<float, 2 * fftSize> minPhaseWork {};
+    std::array<float, 2 * maxFftSize> minPhaseWork {};
 
     juce::SmoothedValue<float> depthSmoothed;
     juce::SmoothedValue<float> mixSmoothed;

@@ -42,7 +42,7 @@ namespace
 TEST_CASE ("Default curve is perfectly flat", "[sensitivity]")
 {
     sensitivity::Parameters parameters;
-    std::array<float, AdaptiveTransientShaper::numBins> weights {};
+    std::array<float, AdaptiveTransientShaper::maxNumBins> weights {};
 
     sensitivity::computeWeights (parameters, testSampleRate, (int) weights.size(), weights.data());
 
