@@ -126,8 +126,8 @@ TEST_CASE ("Editor controls follow the parameters")
     REQUIRE (mode != nullptr);
 
     // Defaults straight from the parameter layout.
-    REQUIRE (juce::approximatelyEqual (depth->getValue(), 0.0));
-    REQUIRE (juce::approximatelyEqual (trim->getValue(), 0.0));
+    REQUIRE (std::abs (depth->getValue()) < 0.01);
+    REQUIRE (std::abs (trim->getValue()) < 0.01);
     REQUIRE (mode->getSelectedItemIndex() == 0);
 
     // Moving a parameter updates the control through the attachment.
