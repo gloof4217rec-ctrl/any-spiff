@@ -40,6 +40,7 @@ private:
 
     void updateAbButtons();
     void updateUndoRedoButtons();
+    void refreshPresetBox();
     void valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& property) override;
 
     PluginProcessor& processorRef;
@@ -51,6 +52,10 @@ private:
     juce::TextButton copyAbButton { juce::String::fromUTF8 ("A\xE2\x86\x92" "B") };
     juce::TextButton undoButton { "Undo" };
     juce::TextButton redoButton { "Redo" };
+
+    juce::ComboBox presetBox;
+    juce::TextButton savePresetButton { "Save" };
+    int userPresetCounter = 1;
 
     juce::OwnedArray<SliderControl> sliderControls;
 

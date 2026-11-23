@@ -56,6 +56,29 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     updateUndoRedoButtons();
 
+    // Preset selector + save.
+    presetBox.setName ("preset_box");
+    presetBox.setTooltip ("Preset");
+    presetBox.onChange = [this]
+    {
+        const auto name = presetBox.getText();
+
+        if (name.isNotEmpty())
+            processorRef.loadPreset (name);
+    };
+
+    savePresetButton.setName ("save_preset_button");
+    savePresetButton.onClick = [this]
+    {
+        const auto name = "User Preset " + juce::String (userPresetCounter++);
+        processorRef.saveCurrentAsUserPreset (name);
+        refreshPresetBox();
+    };
+
+    addAndMakeVisible (presetBox);
+    addAndMakeVisible (savePresetButton);
+    refreshPresetBox();
+
     processorRef.apvts.state.addListener (this);
 
     addAndMakeVisible (sensitivityGraph);
@@ -98,6 +121,17 @@ void PluginEditor::updateUndoRedoButtons()
 void PluginEditor::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&)
 {
     updateUndoRedoButtons();
+}
+
+void PluginEditor::refreshPresetBox()
+{
+    presetBox.clear (juce::dontSendNotification);
+
+    const auto names = processorRef.getPresetNames();
+    presetBox.addItemList (names, 1);
+
+    if (names.size() > 0)
+        presetBox.setSelectedItemIndex (0, juce::dontSendNotification);
 }
 
 PluginEditor::SliderControl& PluginEditor::addSlider (const char* parameterId, const juce::String& name)
@@ -187,6 +221,8 @@ void PluginEditor::resized()
     undoButton.setBounds (bottomRow.removeFromLeft (60));
     bottomRow.removeFromLeft (4);
     redoButton.setBounds (bottomRow.removeFromLeft (60));
+    presetBox.setBounds (bottomRow.removeFromRight (180));
+    savePresetButton.setBounds (bottomRow.removeFromRight (50));
     inspectButton.setBounds (bottomRow.removeFromRight (120));
     area.removeFromBottom (30);
 

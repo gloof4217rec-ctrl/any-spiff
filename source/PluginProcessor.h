@@ -61,6 +61,12 @@ public:
     bool canUndo() const noexcept { return ! undoStack.empty(); }
     bool canRedo() const noexcept { return ! redoStack.empty(); }
 
+    /** Presets: factory presets plus user presets persisted to disk. */
+    juce::StringArray getPresetNames() const;
+    void loadPreset (const juce::String& name);
+    void saveCurrentAsUserPreset (const juce::String& name);
+    void deleteUserPreset (const juce::String& name);
+
     /** Copies the current per-bin processing amount (0..1) for the reduction graph. */
     void getReductionSnapshot (std::array<float, AdaptiveTransientShaper::maxNumBins>& destination) const;
 
@@ -75,6 +81,11 @@ private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void timerCallback() override;
     void noteParameterChange();
+
+    juce::ValueTree buildPresetState (const std::vector<std::pair<juce::String, float>>& overrides);
+    juce::ValueTree findPresetByName (const juce::String& name) const;
+    void loadUserPresetsFromDisk();
+    void writeUserPresetsToDisk() const;
 
     AdaptiveTransientShaper transientShaper;
 
@@ -129,6 +140,10 @@ private:
     juce::ValueTree lastCommitted;
     bool gestureActive = false;
     bool ignoreChanges = false;
+
+    std::vector<std::pair<juce::String, juce::ValueTree>> factoryPresets;
+    juce::ValueTree userPresets { "USER_PRESETS" };
+    juce::File userPresetsFile;
 
     int lastReportedLatency = 0;
 

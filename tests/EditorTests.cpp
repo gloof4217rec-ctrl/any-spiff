@@ -100,12 +100,16 @@ TEST_CASE ("Editor shows every parameter")
     REQUIRE (graph->getWidth() > 0);
     REQUIRE (graph->getHeight() > 0);
 
-    // A/B comparison buttons.
-    for (const auto& id : juce::StringArray { "a_button", "b_button", "copy_ab_button", "undo_button", "redo_button" })
+    // A/B comparison, undo/redo and preset buttons.
+    for (const auto& id : juce::StringArray { "a_button", "b_button", "copy_ab_button", "undo_button", "redo_button", "save_preset_button" })
     {
         auto* button = dynamic_cast<juce::TextButton*> (findChildByName (editor, id));
         REQUIRE (button != nullptr);
     }
+
+    auto* presetBox = dynamic_cast<juce::ComboBox*> (findChildByName (editor, "preset_box"));
+    REQUIRE (presetBox != nullptr);
+    REQUIRE (presetBox->getNumItems() > 0);
 }
 
 TEST_CASE ("Editor controls follow the parameters")

@@ -25,6 +25,21 @@ PluginProcessor::PluginProcessor()
         const auto child = apvts.state.getChild (i);
         apvts.addParameterListener (child["id"].toString(), this);
     }
+
+    // Factory presets.
+    factoryPresets = {
+        { "Default",           buildPresetState ({}) },
+        { "De-Click (gentle)", buildPresetState ({ { "depth", 0.3f }, { "sensitivity", 0.4f }, { "sharpness", 0.4f }, { "decay", 0.2f } }) },
+        { "De-Click (strong)", buildPresetState ({ { "depth", 0.6f }, { "sensitivity", 0.6f }, { "sharpness", 0.7f }, { "decay", 0.4f } }) },
+        { "Transient boost",   buildPresetState ({ { "mode", 1.0f }, { "depth", 0.4f }, { "sensitivity", 0.5f }, { "decay", 0.2f } }) },
+        { "Drum attack",       buildPresetState ({ { "mode", 1.0f }, { "depth", 0.6f }, { "sensitivity", 0.5f }, { "sharpness", 0.3f }, { "decay", 0.5f } }) }
+    };
+
+    userPresetsFile = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                          .getChildFile ("Transient Sculptor")
+                          .getChildFile ("presets.xml");
+
+    loadUserPresetsFromDisk();
 }
 
 PluginProcessor::~PluginProcessor()
@@ -553,6 +568,116 @@ void PluginProcessor::redo()
     ignoreChanges = true;
     apvts.replaceState (lastCommitted);
     ignoreChanges = false;
+}
+
+juce::ValueTree PluginProcessor::buildPresetState (const std::vector<std::pair<juce::String, float>>& overrides)
+{
+    auto state = apvts.copyState();
+
+    for (const auto& [id, normalisedValue] : overrides)
+    {
+        for (int i = 0; i < state.getNumChildren(); ++i)
+        {
+            auto child = state.getChild (i);
+
+            if (child["id"].toString() == id)
+            {
+                if (auto* param = apvts.getParameter (id))
+                    child.setProperty (juce::Identifier ("value"), param->convertFrom0to1 (normalisedValue), nullptr);
+
+                break;
+            }
+        }
+    }
+
+    return state;
+}
+
+juce::ValueTree PluginProcessor::findPresetByName (const juce::String& name) const
+{
+    for (const auto& [presetName, state] : factoryPresets)
+        if (presetName == name)
+            return state;
+
+    for (int i = 0; i < userPresets.getNumChildren(); ++i)
+    {
+        const auto child = userPresets.getChild (i);
+
+        if (child["name"].toString() == name)
+            return child;
+    }
+
+    return {};
+}
+
+void PluginProcessor::loadUserPresetsFromDisk()
+{
+    userPresets = juce::ValueTree ("USER_PRESETS");
+
+    if (userPresetsFile.existsAsFile())
+        if (auto xml = juce::XmlDocument::parse (userPresetsFile))
+        {
+            const auto tree = juce::ValueTree::fromXml (*xml);
+
+            if (tree.isValid() && tree.hasType ("USER_PRESETS"))
+                userPresets = tree;
+        }
+}
+
+void PluginProcessor::writeUserPresetsToDisk() const
+{
+    userPresetsFile.getParentDirectory().createDirectory();
+
+    if (auto xml = userPresets.createXml())
+        xml->writeTo (userPresetsFile);
+}
+
+juce::StringArray PluginProcessor::getPresetNames() const
+{
+    juce::StringArray names;
+
+    for (const auto& [name, state] : factoryPresets)
+        names.add (name);
+
+    for (int i = 0; i < userPresets.getNumChildren(); ++i)
+        names.add (userPresets.getChild (i)["name"].toString());
+
+    return names;
+}
+
+void PluginProcessor::loadPreset (const juce::String& name)
+{
+    const auto preset = findPresetByName (name);
+
+    if (! preset.isValid())
+        return;
+
+    auto state = preset.createCopy();
+    state.removeProperty (juce::Identifier ("name"), nullptr);
+
+    ignoreChanges = true;
+    apvts.replaceState (state);
+    ignoreChanges = false;
+}
+
+void PluginProcessor::saveCurrentAsUserPreset (const juce::String& name)
+{
+    deleteUserPreset (name);
+
+    auto state = apvts.copyState();
+    state.setProperty (juce::Identifier ("name"), name, nullptr);
+
+    userPresets.appendChild (state, nullptr);
+    writeUserPresetsToDisk();
+}
+
+void PluginProcessor::deleteUserPreset (const juce::String& name)
+{
+    for (int i = userPresets.getNumChildren(); --i >= 0;)
+        if (userPresets.getChild (i)["name"].toString() == name)
+            userPresets.removeChild (i, nullptr);
+
+    writeUserPresetsToDisk();
 }
 
 void PluginProcessor::getReductionSnapshot (std::array<float, AdaptiveTransientShaper::maxNumBins>& destination) const

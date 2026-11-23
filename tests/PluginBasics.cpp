@@ -86,6 +86,36 @@ TEST_CASE ("Undo/redo reverts parameter edits", "[undo]")
     CHECK (processor.canUndo());
 }
 
+TEST_CASE ("Presets load and save parameter states", "[preset]")
+{
+    PluginProcessor processor;
+
+    const auto depth = [] (PluginProcessor& p) { return p.apvts.getRawParameterValue ("depth")->load(); };
+
+    const auto names = processor.getPresetNames();
+    REQUIRE (names.contains ("Default"));
+    REQUIRE (names.contains ("De-Click (gentle)"));
+
+    // Load a factory preset: depth becomes 30.
+    processor.loadPreset ("De-Click (gentle)");
+    CHECK (std::abs (depth (processor) - 30.0f) < 0.1f);
+
+    // Save the current state as a user preset.
+    processor.saveCurrentAsUserPreset ("My Test Preset");
+    CHECK (processor.getPresetNames().contains ("My Test Preset"));
+
+    // Default resets depth, then the user preset restores it.
+    processor.loadPreset ("Default");
+    CHECK (depth (processor) < 0.01f);
+
+    processor.loadPreset ("My Test Preset");
+    CHECK (std::abs (depth (processor) - 30.0f) < 0.1f);
+
+    // Delete the user preset.
+    processor.deleteUserPreset ("My Test Preset");
+    CHECK (! processor.getPresetNames().contains ("My Test Preset"));
+}
+
 
 #ifdef PAMPLEJUCE_IPP
     #include <ipp.h>
