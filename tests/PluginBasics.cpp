@@ -25,6 +25,41 @@ TEST_CASE ("Plugin instance", "[instance]")
     }
 }
 
+TEST_CASE ("A/B comparison switches between two parameter sets", "[ab]")
+{
+    PluginProcessor processor;
+
+    const auto depth = [] (PluginProcessor& p) { return p.apvts.getRawParameterValue ("depth")->load(); };
+
+    // On A, set depth to 60.
+    processor.apvts.getParameter ("depth")->setValueNotifyingHost (0.6f);
+    CHECK (processor.isShowingA());
+    CHECK (std::abs (depth (processor) - 60.0f) < 0.01f);
+
+    // Switch to B: it holds the default (depth 0).
+    processor.switchToB();
+    CHECK (! processor.isShowingA());
+    CHECK (depth (processor) < 0.01f);
+
+    // On B, set depth to 90.
+    processor.apvts.getParameter ("depth")->setValueNotifyingHost (0.9f);
+    CHECK (std::abs (depth (processor) - 90.0f) < 0.01f);
+
+    // Back to A: depth is 60 again.
+    processor.switchToA();
+    CHECK (processor.isShowingA());
+    CHECK (std::abs (depth (processor) - 60.0f) < 0.01f);
+
+    // Copy A to B: B now matches A, and we land on B.
+    processor.copyAToB();
+    CHECK (! processor.isShowingA());
+    CHECK (std::abs (depth (processor) - 60.0f) < 0.01f);
+
+    // And A is still intact after a round trip.
+    processor.switchToA();
+    CHECK (std::abs (depth (processor) - 60.0f) < 0.01f);
+}
+
 
 #ifdef PAMPLEJUCE_IPP
     #include <ipp.h>

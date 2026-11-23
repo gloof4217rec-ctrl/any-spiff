@@ -37,9 +37,15 @@ private:
                      const juce::String& name,
                      std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>& attachment);
 
+    void updateAbButtons();
+
     PluginProcessor& processorRef;
     std::unique_ptr<melatonin::Inspector> inspector;
     juce::TextButton inspectButton { "Inspect the UI" };
+
+    juce::TextButton aButton { "A" };
+    juce::TextButton bButton { "B" };
+    juce::TextButton copyAbButton { juce::String::fromUTF8 ("A\xE2\x86\x92" "B") };
 
     juce::OwnedArray<SliderControl> sliderControls;
 

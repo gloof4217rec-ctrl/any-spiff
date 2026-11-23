@@ -14,6 +14,9 @@ PluginProcessor::PluginProcessor()
        apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
     cacheParameterPointers();
+
+    stateA = apvts.copyState();
+    stateB = apvts.copyState();
 }
 
 PluginProcessor::~PluginProcessor()
@@ -432,6 +435,40 @@ void PluginProcessor::endBandListen()
 {
     if (auto* param = apvts.getParameter ("band_listen"))
         param->setValueNotifyingHost (0.0f);
+}
+
+void PluginProcessor::switchToA()
+{
+    if (showingA)
+        return;
+
+    stateB = apvts.copyState();   // remember B before leaving it
+    showingA = true;
+    apvts.replaceState (stateA);
+}
+
+void PluginProcessor::switchToB()
+{
+    if (! showingA)
+        return;
+
+    stateA = apvts.copyState();   // remember A before leaving it
+    showingA = false;
+    apvts.replaceState (stateB);
+}
+
+void PluginProcessor::copyAToB()
+{
+    // A's current settings: the live tree if we're on A, else the stored A.
+    const auto aSnapshot = showingA ? apvts.copyState() : stateA.createCopy();
+
+    stateB = aSnapshot;
+
+    if (showingA)
+        stateA = aSnapshot;
+
+    showingA = false;
+    apvts.replaceState (stateB);
 }
 
 void PluginProcessor::getReductionSnapshot (std::array<float, AdaptiveTransientShaper::maxNumBins>& destination) const

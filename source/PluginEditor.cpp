@@ -26,6 +26,24 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     deltaAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processorRef.apvts, "delta", deltaButton);
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processorRef.apvts, "bypass", bypassButton);
 
+    // A/B comparison buttons.
+    aButton.setName ("a_button");
+    bButton.setName ("b_button");
+    copyAbButton.setName ("copy_ab_button");
+
+    aButton.setClickingTogglesState (true);
+    bButton.setClickingTogglesState (true);
+
+    addAndMakeVisible (aButton);
+    addAndMakeVisible (bButton);
+    addAndMakeVisible (copyAbButton);
+
+    aButton.onClick = [this] { processorRef.switchToA(); updateAbButtons(); };
+    bButton.onClick = [this] { processorRef.switchToB(); updateAbButtons(); };
+    copyAbButton.onClick = [this] { processorRef.copyAToB(); updateAbButtons(); };
+
+    updateAbButtons();
+
     addAndMakeVisible (sensitivityGraph);
     sensitivityGraph.setName ("sensitivity_graph");
     addAndMakeVisible (inspectButton);
@@ -48,6 +66,12 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
 PluginEditor::~PluginEditor()
 {
+}
+
+void PluginEditor::updateAbButtons()
+{
+    aButton.setToggleState (processorRef.isShowingA(), juce::dontSendNotification);
+    bButton.setToggleState (! processorRef.isShowingA(), juce::dontSendNotification);
 }
 
 PluginEditor::SliderControl& PluginEditor::addSlider (const char* parameterId, const juce::String& name)
@@ -128,7 +152,12 @@ void PluginEditor::resized()
     sensitivityGraph.setBounds (area.removeFromTop (150));
     area.removeFromTop (12);
 
-    inspectButton.setBounds (area.removeFromBottom (24).removeFromRight (120));
+    auto bottomRow = area.removeFromBottom (24);
+    aButton.setBounds (bottomRow.removeFromLeft (30));
+    bButton.setBounds (bottomRow.removeFromLeft (30));
+    bottomRow.removeFromLeft (4);
+    copyAbButton.setBounds (bottomRow.removeFromLeft (56));
+    inspectButton.setBounds (bottomRow.removeFromRight (120));
     area.removeFromBottom (30);
 
     auto advancedRow = area.removeFromBottom (46);

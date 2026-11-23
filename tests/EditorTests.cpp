@@ -99,6 +99,13 @@ TEST_CASE ("Editor shows every parameter")
     REQUIRE (graph->isVisible());
     REQUIRE (graph->getWidth() > 0);
     REQUIRE (graph->getHeight() > 0);
+
+    // A/B comparison buttons.
+    for (const auto& id : juce::StringArray { "a_button", "b_button", "copy_ab_button" })
+    {
+        auto* button = dynamic_cast<juce::TextButton*> (findChildByName (editor, id));
+        REQUIRE (button != nullptr);
+    }
 }
 
 TEST_CASE ("Editor controls follow the parameters")

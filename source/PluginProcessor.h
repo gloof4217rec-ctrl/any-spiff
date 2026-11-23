@@ -47,6 +47,12 @@ public:
     void beginBandListen (float frequencyHz, float q);
     void endBandListen();
 
+    /** A/B comparison: two parameter snapshots the editor can switch between. */
+    void switchToA();
+    void switchToB();
+    void copyAToB();
+    bool isShowingA() const noexcept { return showingA; }
+
     /** Copies the current per-bin processing amount (0..1) for the reduction graph. */
     void getReductionSnapshot (std::array<float, AdaptiveTransientShaper::maxNumBins>& destination) const;
 
@@ -101,6 +107,10 @@ private:
 
     std::atomic<float> bandListenFrequency { 1000.0f };
     std::atomic<float> bandListenQ { 1.0f };
+
+    juce::ValueTree stateA;
+    juce::ValueTree stateB;
+    bool showingA = true;
 
     int lastReportedLatency = 0;
 
