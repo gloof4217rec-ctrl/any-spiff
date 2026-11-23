@@ -11,7 +11,8 @@
     All controls are bound to the APVTS with attachments, so the editor itself
     never touches the DSP or the parameter values directly.
 */
-class PluginEditor : public juce::AudioProcessorEditor
+class PluginEditor : public juce::AudioProcessorEditor,
+                     public juce::ValueTree::Listener
 {
 public:
     explicit PluginEditor (PluginProcessor&);
@@ -38,6 +39,8 @@ private:
                      std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>& attachment);
 
     void updateAbButtons();
+    void updateUndoRedoButtons();
+    void valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& property) override;
 
     PluginProcessor& processorRef;
     std::unique_ptr<melatonin::Inspector> inspector;
@@ -46,6 +49,8 @@ private:
     juce::TextButton aButton { "A" };
     juce::TextButton bButton { "B" };
     juce::TextButton copyAbButton { juce::String::fromUTF8 ("A\xE2\x86\x92" "B") };
+    juce::TextButton undoButton { "Undo" };
+    juce::TextButton redoButton { "Redo" };
 
     juce::OwnedArray<SliderControl> sliderControls;
 

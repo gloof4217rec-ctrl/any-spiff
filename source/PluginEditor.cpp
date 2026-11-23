@@ -44,6 +44,20 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     updateAbButtons();
 
+    // Undo/redo buttons.
+    undoButton.setName ("undo_button");
+    redoButton.setName ("redo_button");
+
+    addAndMakeVisible (undoButton);
+    addAndMakeVisible (redoButton);
+
+    undoButton.onClick = [this] { processorRef.undo(); updateUndoRedoButtons(); };
+    redoButton.onClick = [this] { processorRef.redo(); updateUndoRedoButtons(); };
+
+    updateUndoRedoButtons();
+
+    processorRef.apvts.state.addListener (this);
+
     addAndMakeVisible (sensitivityGraph);
     sensitivityGraph.setName ("sensitivity_graph");
     addAndMakeVisible (inspectButton);
@@ -66,12 +80,24 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
 PluginEditor::~PluginEditor()
 {
+    processorRef.apvts.state.removeListener (this);
 }
 
 void PluginEditor::updateAbButtons()
 {
     aButton.setToggleState (processorRef.isShowingA(), juce::dontSendNotification);
     bButton.setToggleState (! processorRef.isShowingA(), juce::dontSendNotification);
+}
+
+void PluginEditor::updateUndoRedoButtons()
+{
+    undoButton.setEnabled (processorRef.canUndo());
+    redoButton.setEnabled (processorRef.canRedo());
+}
+
+void PluginEditor::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&)
+{
+    updateUndoRedoButtons();
 }
 
 PluginEditor::SliderControl& PluginEditor::addSlider (const char* parameterId, const juce::String& name)
@@ -157,6 +183,10 @@ void PluginEditor::resized()
     bButton.setBounds (bottomRow.removeFromLeft (30));
     bottomRow.removeFromLeft (4);
     copyAbButton.setBounds (bottomRow.removeFromLeft (56));
+    bottomRow.removeFromLeft (12);
+    undoButton.setBounds (bottomRow.removeFromLeft (60));
+    bottomRow.removeFromLeft (4);
+    redoButton.setBounds (bottomRow.removeFromLeft (60));
     inspectButton.setBounds (bottomRow.removeFromRight (120));
     area.removeFromBottom (30);
 

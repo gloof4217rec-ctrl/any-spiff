@@ -4,7 +4,9 @@
 
 #include "dsp/AdaptiveTransientShaper.h"
 
-class PluginProcessor : public juce::AudioProcessor
+class PluginProcessor : public juce::AudioProcessor,
+                        public juce::AudioProcessorValueTreeState::Listener,
+                        private juce::Timer
 {
 public:
     PluginProcessor();
@@ -53,6 +55,12 @@ public:
     void copyAToB();
     bool isShowingA() const noexcept { return showingA; }
 
+    /** Undo/redo: a snapshot history of parameter edits. */
+    void undo();
+    void redo();
+    bool canUndo() const noexcept { return ! undoStack.empty(); }
+    bool canRedo() const noexcept { return ! redoStack.empty(); }
+
     /** Copies the current per-bin processing amount (0..1) for the reduction graph. */
     void getReductionSnapshot (std::array<float, AdaptiveTransientShaper::maxNumBins>& destination) const;
 
@@ -63,6 +71,10 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     void cacheParameterPointers();
+
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void timerCallback() override;
+    void noteParameterChange();
 
     AdaptiveTransientShaper transientShaper;
 
@@ -111,6 +123,12 @@ private:
     juce::ValueTree stateA;
     juce::ValueTree stateB;
     bool showingA = true;
+
+    std::vector<juce::ValueTree> undoStack;
+    std::vector<juce::ValueTree> redoStack;
+    juce::ValueTree lastCommitted;
+    bool gestureActive = false;
+    bool ignoreChanges = false;
 
     int lastReportedLatency = 0;
 

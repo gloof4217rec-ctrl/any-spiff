@@ -17,10 +17,23 @@ PluginProcessor::PluginProcessor()
 
     stateA = apvts.copyState();
     stateB = apvts.copyState();
+    lastCommitted = apvts.copyState();
+
+    // Listen to every parameter so parameter edits can be captured for undo.
+    for (int i = 0; i < apvts.state.getNumChildren(); ++i)
+    {
+        const auto child = apvts.state.getChild (i);
+        apvts.addParameterListener (child["id"].toString(), this);
+    }
 }
 
 PluginProcessor::~PluginProcessor()
 {
+    for (int i = 0; i < apvts.state.getNumChildren(); ++i)
+    {
+        const auto child = apvts.state.getChild (i);
+        apvts.removeParameterListener (child["id"].toString(), this);
+    }
 }
 
 //==============================================================================
@@ -444,7 +457,10 @@ void PluginProcessor::switchToA()
 
     stateB = apvts.copyState();   // remember B before leaving it
     showingA = true;
+
+    ignoreChanges = true;
     apvts.replaceState (stateA);
+    ignoreChanges = false;
 }
 
 void PluginProcessor::switchToB()
@@ -454,7 +470,10 @@ void PluginProcessor::switchToB()
 
     stateA = apvts.copyState();   // remember A before leaving it
     showingA = false;
+
+    ignoreChanges = true;
     apvts.replaceState (stateB);
+    ignoreChanges = false;
 }
 
 void PluginProcessor::copyAToB()
@@ -468,7 +487,72 @@ void PluginProcessor::copyAToB()
         stateA = aSnapshot;
 
     showingA = false;
+
+    ignoreChanges = true;
     apvts.replaceState (stateB);
+    ignoreChanges = false;
+}
+
+void PluginProcessor::parameterChanged (const juce::String&, float)
+{
+    noteParameterChange();
+}
+
+void PluginProcessor::noteParameterChange()
+{
+    if (ignoreChanges)
+        return;
+
+    if (! gestureActive)
+    {
+        // Start a new undo step: remember the state before this gesture.
+        undoStack.push_back (lastCommitted);
+        redoStack.clear();
+        gestureActive = true;
+    }
+
+    startTimer (500);   // coalesce rapid edits (e.g. a slider drag) into one step
+}
+
+void PluginProcessor::timerCallback()
+{
+    stopTimer();
+    gestureActive = false;
+    lastCommitted = apvts.copyState();
+}
+
+void PluginProcessor::undo()
+{
+    if (undoStack.empty())
+        return;
+
+    stopTimer();
+    gestureActive = false;
+
+    redoStack.push_back (apvts.copyState());
+    lastCommitted = undoStack.back();
+    undoStack.pop_back();
+
+    ignoreChanges = true;
+    apvts.replaceState (lastCommitted);
+    ignoreChanges = false;
+}
+
+void PluginProcessor::redo()
+{
+    if (redoStack.empty())
+        return;
+
+    stopTimer();
+    gestureActive = false;
+
+    undoStack.push_back (apvts.copyState());
+    lastCommitted = redoStack.back();
+    redoStack.pop_back();
+
+    ignoreChanges = true;
+    apvts.replaceState (lastCommitted);
+    ignoreChanges = false;
 }
 
 void PluginProcessor::getReductionSnapshot (std::array<float, AdaptiveTransientShaper::maxNumBins>& destination) const

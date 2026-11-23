@@ -101,7 +101,7 @@ TEST_CASE ("Editor shows every parameter")
     REQUIRE (graph->getHeight() > 0);
 
     // A/B comparison buttons.
-    for (const auto& id : juce::StringArray { "a_button", "b_button", "copy_ab_button" })
+    for (const auto& id : juce::StringArray { "a_button", "b_button", "copy_ab_button", "undo_button", "redo_button" })
     {
         auto* button = dynamic_cast<juce::TextButton*> (findChildByName (editor, id));
         REQUIRE (button != nullptr);

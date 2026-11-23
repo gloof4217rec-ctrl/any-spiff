@@ -60,6 +60,32 @@ TEST_CASE ("A/B comparison switches between two parameter sets", "[ab]")
     CHECK (std::abs (depth (processor) - 60.0f) < 0.01f);
 }
 
+TEST_CASE ("Undo/redo reverts parameter edits", "[undo]")
+{
+    PluginProcessor processor;
+
+    const auto depth = [] (PluginProcessor& p) { return p.apvts.getRawParameterValue ("depth")->load(); };
+
+    CHECK (depth (processor) < 0.01f);
+    CHECK (! processor.canUndo());
+    CHECK (! processor.canRedo());
+
+    // Change depth to 30.
+    processor.apvts.getParameter ("depth")->setValueNotifyingHost (0.3f);
+    CHECK (std::abs (depth (processor) - 30.0f) < 0.01f);
+    CHECK (processor.canUndo());
+
+    // Undo: depth reverts to 0.
+    processor.undo();
+    CHECK (depth (processor) < 0.01f);
+    CHECK (processor.canRedo());
+
+    // Redo: depth is 30 again.
+    processor.redo();
+    CHECK (std::abs (depth (processor) - 30.0f) < 0.01f);
+    CHECK (processor.canUndo());
+}
+
 
 #ifdef PAMPLEJUCE_IPP
     #include <ipp.h>
