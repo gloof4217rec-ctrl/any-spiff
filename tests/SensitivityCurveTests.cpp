@@ -74,6 +74,20 @@ TEST_CASE ("A -12 dB band reduces weight at its centre only", "[sensitivity]")
     REQUIRE (far > 0.95f);
 }
 
+TEST_CASE ("A +6 dB band boosts weight at its centre", "[sensitivity]")
+{
+    sensitivity::Parameters parameters;
+    parameters.bands[0].frequencyHz = 1000.0f;
+    parameters.bands[0].gainDb = 6.0f;
+    parameters.bands[0].q = 1.0f;
+
+    const auto centre = weightAt (parameters, 1000.0f);
+    const auto far = weightAt (parameters, 20.0f);
+
+    REQUIRE (centre == Catch::Approx (2.0f).margin (0.1f));
+    REQUIRE (far == Catch::Approx (1.0f).margin (0.05f));
+}
+
 TEST_CASE ("Lo cut removes low-frequency processing", "[sensitivity]")
 {
     sensitivity::Parameters parameters;

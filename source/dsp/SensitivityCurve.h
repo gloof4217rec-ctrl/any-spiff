@@ -13,8 +13,9 @@
 
     The curve is modelled as three user bands (parametric / low shelf / high
     shelf / tilt shelf) plus a lo cut (high-pass) and a hi cut (low-pass). All
-    contributions are summed in dB and converted to a 0..1 weight, so the curve
-    can only *reduce* the amount of processing per frequency.
+    contributions are summed in dB and converted to a linear weight: 0 dB maps
+    to 1.0, positive gains boost the per-frequency processing above the default
+    and negative gains attenuate it towards zero.
 */
 namespace sensitivity
 {
@@ -68,13 +69,14 @@ namespace sensitivity
         }
     };
 
-    /** Fills `weights` (size `numBins`) with a 0..1 multiplier for the centre
-        frequency of each bin. 1.0 means "full processing".
+    /** Fills `weights` (size `numBins`) with a per-bin multiplier for the
+        centre frequency of each bin. 1.0 is the default; values above 1 boost
+        the per-frequency processing and values below 1 attenuate it.
     */
     void computeWeights (const Parameters& parameters, double sampleRate,
                          int numBins, float* weights);
 
-    /** The curve weight (0..1) at a single frequency. Used by the graph UI. */
+    /** The curve weight at a single frequency. Used by the graph UI. */
     float weightAtFrequency (const Parameters& parameters, double sampleRate, float frequencyHz);
 
     /** Builds the band-listen bandpass centred on `frequencyHz` with the given Q. */

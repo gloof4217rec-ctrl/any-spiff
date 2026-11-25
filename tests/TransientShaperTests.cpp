@@ -363,6 +363,39 @@ TEST_CASE ("Sensitivity curve weakens the cut", "[dsp]")
     CHECK (clickAttenuated > clickFlat);
 }
 
+TEST_CASE ("Sensitivity boost strengthens the cut", "[dsp]")
+{
+    const auto input = makeClickySignal (48000);
+
+    auto flatOutput = input;
+    {
+        AdaptiveTransientShaper shaper;
+        shaper.prepare (testSampleRate);
+        processInBlocks (shaper, flatOutput, makeActiveCutParameters());
+    }
+
+    auto boostedOutput = input;
+    {
+        AdaptiveTransientShaper shaper;
+        shaper.prepare (testSampleRate);
+
+        auto parameters = makeActiveCutParameters();
+        for (auto& band : parameters.curve.bands)
+            band.gainDb = 6.0f;
+
+        processInBlocks (shaper, boostedOutput, parameters);
+    }
+
+    constexpr int clickSample = 12000;
+    const auto clickBefore = rms (input, clickSample, 2048);
+    const auto clickFlat = rms (flatOutput, clickSample + latencySamples, 2048);
+    const auto clickBoosted = rms (boostedOutput, clickSample + latencySamples, 2048);
+
+    // The flat curve already cuts the click; a +6 dB sensitivity boost cuts more.
+    CHECK (clickFlat < 0.85f * clickBefore);
+    CHECK (clickBoosted < clickFlat);
+}
+
 TEST_CASE ("Reduction snapshot reports active bins", "[dsp]")
 {
     AdaptiveTransientShaper shaper;

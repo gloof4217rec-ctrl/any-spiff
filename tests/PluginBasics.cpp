@@ -116,6 +116,24 @@ TEST_CASE ("Presets load and save parameter states", "[preset]")
     CHECK (! processor.getPresetNames().contains ("My Test Preset"));
 }
 
+TEST_CASE ("Band listen toggles the parameter without moving it", "[band_listen]")
+{
+    PluginProcessor processor;
+
+    const auto* listenParam = processor.apvts.getRawParameterValue ("band_listen");
+    REQUIRE (listenParam != nullptr);
+
+    processor.beginBandListen (500.0f, 1.0f);
+    CHECK (listenParam->load() > 0.5f);
+
+    // Sweeping the listened frequency must not toggle the parameter back off.
+    processor.updateBandListen (2000.0f, 2.0f);
+    CHECK (listenParam->load() > 0.5f);
+
+    processor.endBandListen();
+    CHECK (listenParam->load() < 0.5f);
+}
+
 
 #ifdef PAMPLEJUCE_IPP
     #include <ipp.h>

@@ -137,7 +137,11 @@ namespace
 
     float dbToWeight (double gainDb)
     {
-        return (float) juce::jlimit (0.0, 1.0, std::pow (10.0, gainDb / 20.0));
+        // 0 dB maps to a weight of 1.0 (the default, full processing). Positive
+        // gains raise the weight above 1 to boost the per-frequency processing,
+        // negative gains lower it towards 0. The top is capped at +36 dB — three
+        // stacked +12 dB bands — so the multiplier stays finite and sane.
+        return (float) juce::jlimit (0.0, 64.0, std::pow (10.0, gainDb / 20.0));
     }
 }
 

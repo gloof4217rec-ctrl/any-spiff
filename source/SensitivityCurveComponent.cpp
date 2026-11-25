@@ -210,7 +210,7 @@ void SensitivityCurveComponent::drawCurve (juce::Graphics& g, const sensitivity:
         const auto t = (float) i / (float) numPoints;
         const auto freq = frequencyMinHz * std::pow (frequencyMaxHz / frequencyMinHz, t);
         const auto weight = sensitivity::weightAtFrequency (curve, sampleRate, freq);
-        const auto db = juce::jlimit (gainMinDb, 0.0f, 20.0f * std::log10 (juce::jmax (weight, 1.0e-6f)));
+        const auto db = juce::jlimit (gainMinDb, gainMaxDb, 20.0f * std::log10 (juce::jmax (weight, 1.0e-6f)));
 
         const auto x = (float) plot.getX() + t * (float) plot.getWidth();
         const auto y = gainToY (db);
@@ -322,7 +322,13 @@ void SensitivityCurveComponent::mouseDrag (const juce::MouseEvent& event)
     if (dragTarget == DragTarget::band)
     {
         if (listening)
+        {
+            // Alt-drag: sweep the band-listen frequency with the cursor without
+            // moving the node (it returns to its committed position on release).
+            const auto q = currentCurve().bands[(size_t) dragBand].q;
+            processor.updateBandListen (xToFrequency ((float) event.position.x), q);
             return;
+        }
 
         const auto freq = xToFrequency ((float) event.position.x);
         const auto gain = yToGain ((float) event.position.y);

@@ -47,6 +47,7 @@ public:
         band node (band listen). The audio thread only reads the atomics.
     */
     void beginBandListen (float frequencyHz, float q);
+    void updateBandListen (float frequencyHz, float q);
     void endBandListen();
 
     /** A/B comparison: two parameter snapshots the editor can switch between. */

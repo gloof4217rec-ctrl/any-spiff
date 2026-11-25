@@ -452,11 +452,16 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
 void PluginProcessor::beginBandListen (float frequencyHz, float q)
 {
-    bandListenFrequency.store (frequencyHz);
-    bandListenQ.store (q);
+    updateBandListen (frequencyHz, q);
 
     if (auto* param = apvts.getParameter ("band_listen"))
         param->setValueNotifyingHost (1.0f);
+}
+
+void PluginProcessor::updateBandListen (float frequencyHz, float q)
+{
+    bandListenFrequency.store (frequencyHz);
+    bandListenQ.store (q);
 }
 
 void PluginProcessor::endBandListen()
