@@ -83,6 +83,83 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     addAndMakeVisible (sensitivityGraph);
     sensitivityGraph.setName ("sensitivity_graph");
+
+    // Band editor panel: frequency / Q / type / enable for the selected band,
+    // plus the lo/hi cut controls. These write straight into the APVTS, so they
+    // stay in sync with the graph and participate in undo/redo and presets.
+    const auto addBandButton = [this] (juce::TextButton& button, const char* name, int band)
+    {
+        button.setName (name);
+        button.setClickingTogglesState (true);
+        button.onClick = [this, band] { sensitivityGraph.setSelectedBand (band); };
+        addAndMakeVisible (button);
+    };
+    addBandButton (band1Button, "band1_button", 0);
+    addBandButton (band2Button, "band2_button", 1);
+    addBandButton (band3Button, "band3_button", 2);
+
+    bandOnButton.setName ("band_on_button");
+    bandOnButton.onClick = [this]
+    {
+        if (updatingBandPanel)
+            return;
+
+        setParamValue (bandParamId ("on"), bandOnButton.getToggleState() ? 1.0f : 0.0f);
+    };
+    addAndMakeVisible (bandOnButton);
+
+    const auto configureBandSlider = [this] (juce::Slider& slider, juce::Label& label,
+                                             const juce::String& labelText, const juce::String& suffix, const juce::String& rangeSource)
+    {
+        slider.setName ("band_" + suffix + "_slider");
+        slider.setSliderStyle (juce::Slider::LinearHorizontal);
+        slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 56, 20);
+
+        if (auto* param = dynamic_cast<juce::RangedAudioParameter*> (processorRef.apvts.getParameter (rangeSource)))
+        {
+            const auto& range = param->getNormalisableRange();
+            slider.setNormalisableRange ({ (double) range.start, (double) range.end, (double) range.interval, (double) range.skew });
+        }
+
+        slider.onValueChange = [this, &slider, suffix]
+        {
+            if (! updatingBandPanel)
+                setParamValue (bandParamId (suffix), (float) slider.getValue());
+        };
+
+        label.setText (labelText, juce::dontSendNotification);
+        label.setJustificationType (juce::Justification::centred);
+        label.setFont (juce::FontOptions (11.0f));
+
+        addAndMakeVisible (slider);
+        addAndMakeVisible (label);
+    };
+    configureBandSlider (bandFreqSlider, bandFreqLabel, "Frequency", "freq", "band1_freq");
+    configureBandSlider (bandGainSlider, bandGainLabel, "Gain", "gain", "band1_gain");
+    configureBandSlider (bandQSlider, bandQLabel, "Q", "q", "band1_q");
+
+    bandTypeCombo.setName ("band_type_combo");
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (processorRef.apvts.getParameter ("band1_type")))
+        bandTypeCombo.addItemList (choice->choices, 1);
+    bandTypeCombo.onChange = [this]
+    {
+        if (! updatingBandPanel)
+            setParamValue (bandParamId ("type"), (float) bandTypeCombo.getSelectedItemIndex());
+    };
+    bandTypeLabel.setText ("Type", juce::dontSendNotification);
+    bandTypeLabel.setJustificationType (juce::Justification::centred);
+    bandTypeLabel.setFont (juce::FontOptions (11.0f));
+    addAndMakeVisible (bandTypeCombo);
+    addAndMakeVisible (bandTypeLabel);
+
+    setUpPanelSlider (loCutFreqSlider, loCutFreqLabel, "Lo Cut", "locut_freq");
+    setUpPanelCombo (loCutSlopeCombo, loCutSlopeLabel, "Lo Slope", "locut_slope");
+    setUpPanelSlider (hiCutFreqSlider, hiCutFreqLabel, "Hi Cut", "hicut_freq");
+    setUpPanelCombo (hiCutSlopeCombo, hiCutSlopeLabel, "Hi Slope", "hicut_slope");
+
+    sensitivityGraph.onBandSelectionChanged = [this] { refreshBandPanel(); };
+    refreshBandPanel();
+
     addAndMakeVisible (inspectButton);
 
     // this chunk of code instantiates and opens the melatonin inspector
@@ -97,8 +174,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     };
 
     setResizable (true, true);
-    setResizeLimits (640, 520, 1200, 900);
-    setSize (760, 580);
+    setResizeLimits (680, 640, 1200, 900);
+    setSize (760, 680);
 }
 
 PluginEditor::~PluginEditor()
@@ -121,6 +198,7 @@ void PluginEditor::updateUndoRedoButtons()
 void PluginEditor::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&)
 {
     updateUndoRedoButtons();
+    refreshBandPanel();
 }
 
 void PluginEditor::refreshPresetBox()
@@ -181,6 +259,98 @@ void PluginEditor::setUpCombo (juce::ComboBox& combo,
     addAndMakeVisible (label);
 }
 
+juce::String PluginEditor::bandParamId (const juce::String& suffix) const
+{
+    return "band" + juce::String (sensitivityGraph.getSelectedBand() + 1) + "_" + suffix;
+}
+
+float PluginEditor::getParamValue (const juce::String& parameterId) const
+{
+    if (auto* param = processorRef.apvts.getRawParameterValue (parameterId))
+        return param->load();
+
+    return 0.0f;
+}
+
+void PluginEditor::setParamValue (const juce::String& parameterId, float value)
+{
+    if (auto* param = dynamic_cast<juce::RangedAudioParameter*> (processorRef.apvts.getParameter (parameterId)))
+        param->setValueNotifyingHost (param->convertTo0to1 (value));
+}
+
+void PluginEditor::setUpPanelSlider (juce::Slider& slider, juce::Label& label, const juce::String& name, const juce::String& parameterId)
+{
+    slider.setName (parameterId);
+    slider.setSliderStyle (juce::Slider::LinearHorizontal);
+    slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 56, 20);
+
+    if (auto* param = dynamic_cast<juce::RangedAudioParameter*> (processorRef.apvts.getParameter (parameterId)))
+    {
+        const auto& range = param->getNormalisableRange();
+        slider.setNormalisableRange ({ (double) range.start, (double) range.end, (double) range.interval, (double) range.skew });
+    }
+
+    slider.setValue (getParamValue (parameterId), juce::dontSendNotification);
+    slider.onValueChange = [this, &slider, parameterId]
+    {
+        if (! updatingBandPanel)
+            setParamValue (parameterId, (float) slider.getValue());
+    };
+
+    label.setText (name, juce::dontSendNotification);
+    label.setJustificationType (juce::Justification::centred);
+    label.setFont (juce::FontOptions (11.0f));
+
+    addAndMakeVisible (slider);
+    addAndMakeVisible (label);
+}
+
+void PluginEditor::setUpPanelCombo (juce::ComboBox& combo, juce::Label& label, const juce::String& name, const juce::String& parameterId)
+{
+    combo.setName (parameterId);
+
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (processorRef.apvts.getParameter (parameterId)))
+        combo.addItemList (choice->choices, 1);
+
+    combo.onChange = [this, &combo, parameterId]
+    {
+        if (! updatingBandPanel)
+            setParamValue (parameterId, (float) combo.getSelectedItemIndex());
+    };
+
+    label.setText (name, juce::dontSendNotification);
+    label.setJustificationType (juce::Justification::centred);
+    label.setFont (juce::FontOptions (11.0f));
+
+    addAndMakeVisible (combo);
+    addAndMakeVisible (label);
+}
+
+void PluginEditor::refreshBandPanel()
+{
+    updatingBandPanel = true;
+
+    const auto band = sensitivityGraph.getSelectedBand();
+    const auto prefix = "band" + juce::String (band + 1) + "_";
+
+    band1Button.setToggleState (band == 0, juce::dontSendNotification);
+    band2Button.setToggleState (band == 1, juce::dontSendNotification);
+    band3Button.setToggleState (band == 2, juce::dontSendNotification);
+
+    bandFreqSlider.setValue (getParamValue (prefix + "freq"), juce::dontSendNotification);
+    bandGainSlider.setValue (getParamValue (prefix + "gain"), juce::dontSendNotification);
+    bandQSlider.setValue (getParamValue (prefix + "q"), juce::dontSendNotification);
+    bandTypeCombo.setSelectedItemIndex (juce::roundToInt (getParamValue (prefix + "type")), juce::dontSendNotification);
+    bandOnButton.setToggleState (getParamValue (prefix + "on") > 0.5f, juce::dontSendNotification);
+
+    loCutFreqSlider.setValue (getParamValue ("locut_freq"), juce::dontSendNotification);
+    loCutSlopeCombo.setSelectedItemIndex (juce::roundToInt (getParamValue ("locut_slope")), juce::dontSendNotification);
+    hiCutFreqSlider.setValue (getParamValue ("hicut_freq"), juce::dontSendNotification);
+    hiCutSlopeCombo.setSelectedItemIndex (juce::roundToInt (getParamValue ("hicut_slope")), juce::dontSendNotification);
+
+    updatingBandPanel = false;
+}
+
 void PluginEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
@@ -210,6 +380,45 @@ void PluginEditor::resized()
     auto area = getLocalBounds().reduced (12);
     area.removeFromTop (46);     // title
     sensitivityGraph.setBounds (area.removeFromTop (150));
+
+    // Band editor panel: band selector + per-band controls (top row) and the
+    // lo/hi cut controls (bottom row).
+    auto bandPanel = area.removeFromTop (80);
+    auto bandRow = bandPanel.removeFromTop (40);
+
+    band1Button.setBounds (bandRow.removeFromLeft (28));
+    bandRow.removeFromLeft (3);
+    band2Button.setBounds (bandRow.removeFromLeft (28));
+    bandRow.removeFromLeft (3);
+    band3Button.setBounds (bandRow.removeFromLeft (28));
+    bandRow.removeFromLeft (8);
+    bandOnButton.setBounds (bandRow.removeFromLeft (40));
+
+    const auto layoutLabelOnTop = [] (juce::Rectangle<int> r, juce::Label& l, juce::Component& c)
+    {
+        l.setBounds (r.removeFromTop (12));
+        c.setBounds (r);
+    };
+
+    bandRow.removeFromLeft (8);
+    layoutLabelOnTop (bandRow.removeFromLeft (150), bandFreqLabel, bandFreqSlider);
+    bandRow.removeFromLeft (6);
+    layoutLabelOnTop (bandRow.removeFromLeft (104), bandGainLabel, bandGainSlider);
+    bandRow.removeFromLeft (6);
+    layoutLabelOnTop (bandRow.removeFromLeft (104), bandQLabel, bandQSlider);
+    bandRow.removeFromLeft (6);
+    layoutLabelOnTop (bandRow, bandTypeLabel, bandTypeCombo);
+
+    auto cutRow = bandPanel;
+    const auto columnWidth = cutRow.getWidth() / 4;
+    layoutLabelOnTop (cutRow.removeFromLeft (columnWidth), loCutFreqLabel, loCutFreqSlider);
+    cutRow.removeFromLeft (4);
+    layoutLabelOnTop (cutRow.removeFromLeft (columnWidth), loCutSlopeLabel, loCutSlopeCombo);
+    cutRow.removeFromLeft (4);
+    layoutLabelOnTop (cutRow.removeFromLeft (columnWidth), hiCutFreqLabel, hiCutFreqSlider);
+    cutRow.removeFromLeft (4);
+    layoutLabelOnTop (cutRow, hiCutSlopeLabel, hiCutSlopeCombo);
+
     area.removeFromTop (12);
 
     auto bottomRow = area.removeFromBottom (24);

@@ -43,6 +43,14 @@ private:
     void refreshPresetBox();
     void valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& property) override;
 
+    // Band editor panel helpers.
+    void refreshBandPanel();
+    juce::String bandParamId (const juce::String& suffix) const;
+    float getParamValue (const juce::String& parameterId) const;
+    void setParamValue (const juce::String& parameterId, float value);
+    void setUpPanelSlider (juce::Slider& slider, juce::Label& label, const juce::String& name, const juce::String& parameterId);
+    void setUpPanelCombo (juce::ComboBox& combo, juce::Label& label, const juce::String& name, const juce::String& parameterId);
+
     PluginProcessor& processorRef;
     std::unique_ptr<melatonin::Inspector> inspector;
     juce::TextButton inspectButton { "Inspect the UI" };
@@ -76,6 +84,35 @@ private:
 
     juce::ToggleButton deltaButton { "Delta" };
     juce::ToggleButton bypassButton { "Bypass" };
+
+    // Band editor panel: lets the user pick, for each of the three detector
+    // bands, the frequency range it acts on, its Q, its filter type and whether
+    // it is enabled (the Pro-Q style "point" controls).
+    juce::TextButton band1Button { "1" };
+    juce::TextButton band2Button { "2" };
+    juce::TextButton band3Button { "3" };
+    juce::ToggleButton bandOnButton { "On" };
+
+    juce::Slider bandFreqSlider;
+    juce::Slider bandGainSlider;
+    juce::Slider bandQSlider;
+    juce::Label bandFreqLabel;
+    juce::Label bandGainLabel;
+    juce::Label bandQLabel;
+    juce::Label bandTypeLabel;
+    juce::ComboBox bandTypeCombo;
+
+    juce::Slider loCutFreqSlider;
+    juce::Label loCutFreqLabel;
+    juce::ComboBox loCutSlopeCombo;
+    juce::Label loCutSlopeLabel;
+
+    juce::Slider hiCutFreqSlider;
+    juce::Label hiCutFreqLabel;
+    juce::ComboBox hiCutSlopeCombo;
+    juce::Label hiCutSlopeLabel;
+
+    bool updatingBandPanel = false;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> stereoModeAttachment;

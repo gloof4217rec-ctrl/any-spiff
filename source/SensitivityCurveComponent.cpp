@@ -71,6 +71,38 @@ float SensitivityCurveComponent::yToGain (float y) const
     return gainMaxDb - t * (gainMaxDb - gainMinDb);
 }
 
+float SensitivityCurveComponent::qToY (float q) const
+{
+    const auto plot = getPlotBounds();
+    const auto clamped = juce::jlimit (qMin, qMax, q);
+    const auto t = std::log10 (clamped / qMin) / std::log10 (qMax / qMin);
+
+    return (float) plot.getBottom() - t * (float) plot.getHeight();
+}
+
+float SensitivityCurveComponent::yToQ (float y) const
+{
+    const auto plot = getPlotBounds();
+    const auto clamped = juce::jlimit ((float) plot.getY(), (float) plot.getBottom(), y);
+    const auto t = ((float) plot.getBottom() - clamped) / (float) plot.getHeight();
+
+    return qMin * std::pow (qMax / qMin, t);
+}
+
+void SensitivityCurveComponent::setSelectedBand (int band)
+{
+    band = juce::jlimit (0, 2, band);
+
+    if (band == selectedBand)
+        return;
+
+    selectedBand = band;
+    repaint();
+
+    if (onBandSelectionChanged)
+        onBandSelectionChanged();
+}
+
 float SensitivityCurveComponent::readParameter (const char* id) const
 {
     if (const auto* param = processor.apvts.getRawParameterValue (id))
@@ -266,6 +298,26 @@ void SensitivityCurveComponent::drawNodes (juce::Graphics& g, const sensitivity:
         g.fillEllipse (centre.x - nodeRadius, centre.y - nodeRadius, nodeRadius * 2.0f, nodeRadius * 2.0f);
         g.setColour (colour.contrasting (0.6f));
         g.drawEllipse (centre.x - nodeRadius, centre.y - nodeRadius, nodeRadius * 2.0f, nodeRadius * 2.0f, 1.5f);
+
+        if (i == selectedBand)
+        {
+            g.setColour (colour);
+            g.drawEllipse (centre.x - nodeRadius - 4.0f, centre.y - nodeRadius - 4.0f,
+                           (nodeRadius + 4.0f) * 2.0f, (nodeRadius + 4.0f) * 2.0f, 1.5f);
+        }
+    }
+
+    // While Cmd/Ctrl-dragging a band, show the current Q as a horizontal guide.
+    if (draggingQ && dragBand >= 0)
+    {
+        const auto y = qToY (dragQValue);
+        const float qDashes[] = { 3.0f, 3.0f };
+
+        g.setColour (bandColours[dragBand].withAlpha (0.9f));
+        g.drawDashedLine (juce::Line<float> ((float) plot.getX(), y, (float) plot.getRight(), y), qDashes, 2);
+        g.drawText (juce::String ("Q ") + juce::String (dragQValue, 2),
+                    (float) plot.getRight() - 64.0f, y - 15.0f, 64.0f, 12.0f,
+                    juce::Justification::right, false);
     }
 }
 
@@ -305,12 +357,35 @@ void SensitivityCurveComponent::mouseDown (const juce::MouseEvent& event)
     dragTarget = findDragTarget (event.getPosition(), bandIndex);
     dragBand = bandIndex;
 
-    if (dragTarget == DragTarget::band && event.mods.isAltDown())
+    if (dragTarget != DragTarget::band)
+        return;
+
+    setSelectedBand (bandIndex);
+
+    // Double-click toggles the band on/off (frequency-range bypass).
+    if (event.getNumberOfClicks() >= 2)
+    {
+        const auto& ids = bandIds[(size_t) bandIndex];
+        writeParameter (ids.on, readParameter (ids.on) > 0.5f ? 0.0f : 1.0f);
+        dragTarget = DragTarget::none;
+        dragBand = -1;
+        return;
+    }
+
+    if (event.mods.isAltDown())
     {
         // Alt-drag: band listen, the node stays put.
         listening = true;
         const auto band = currentCurve().bands[(size_t) bandIndex];
         processor.beginBandListen (band.frequencyHz, band.q);
+    }
+    else
+    {
+        // Cmd/Ctrl-drag edits Q instead of gain (Pro-Q style).
+        draggingQ = event.mods.isCommandDown() || event.mods.isCtrlDown();
+
+        if (draggingQ)
+            dragQValue = currentCurve().bands[(size_t) bandIndex].q;
     }
 }
 
@@ -331,10 +406,17 @@ void SensitivityCurveComponent::mouseDrag (const juce::MouseEvent& event)
         }
 
         const auto freq = xToFrequency ((float) event.position.x);
-        const auto gain = yToGain ((float) event.position.y);
-
         writeParameter (bandIds[(size_t) dragBand].freq, freq);
-        writeParameter (bandIds[(size_t) dragBand].gain, gain);
+
+        if (draggingQ)
+        {
+            dragQValue = yToQ ((float) event.position.y);
+            writeParameter (bandIds[(size_t) dragBand].q, dragQValue);
+        }
+        else
+        {
+            writeParameter (bandIds[(size_t) dragBand].gain, yToGain ((float) event.position.y));
+        }
     }
     else if (dragTarget == DragTarget::loCut)
     {
@@ -354,6 +436,7 @@ void SensitivityCurveComponent::mouseUp (const juce::MouseEvent&)
         processor.endBandListen();
 
     listening = false;
+    draggingQ = false;
     dragTarget = DragTarget::none;
     dragBand = -1;
 }
@@ -364,10 +447,18 @@ void SensitivityCurveComponent::mouseMove (const juce::MouseEvent& event)
     const auto target = findDragTarget (event.getPosition(), bandIndex);
 
     if (target != DragTarget::none)
-        setMouseCursor (event.mods.isAltDown() ? juce::MouseCursor::PointingHandCursor
-                                               : juce::MouseCursor::DraggingHandCursor);
+    {
+        if (event.mods.isAltDown())
+            setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        else if (target == DragTarget::band && (event.mods.isCommandDown() || event.mods.isCtrlDown()))
+            setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+        else
+            setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+    }
     else
+    {
         setMouseCursor (juce::MouseCursor::NormalCursor);
+    }
 }
 
 void SensitivityCurveComponent::mouseExit (const juce::MouseEvent&)

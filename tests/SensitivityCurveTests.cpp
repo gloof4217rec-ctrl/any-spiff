@@ -88,6 +88,25 @@ TEST_CASE ("A +6 dB band boosts weight at its centre", "[sensitivity]")
     REQUIRE (far == Catch::Approx (1.0f).margin (0.05f));
 }
 
+TEST_CASE ("A sibilance notch leaves the voice fundamental untouched", "[sensitivity]")
+{
+    sensitivity::Parameters parameters;
+
+    // A narrow cut around the "S" consonant energy leaves the fundamental
+    // (and the rest of the spectrum) at full processing weight.
+    parameters.bands[0].frequencyHz = 6000.0f;
+    parameters.bands[0].gainDb = -12.0f;
+    parameters.bands[0].q = 8.0f;
+
+    const auto sibilance = weightAt (parameters, 6000.0f);
+    const auto fundamental = weightAt (parameters, 200.0f);
+    const auto midband = weightAt (parameters, 1000.0f);
+
+    REQUIRE (sibilance < 0.5f);
+    REQUIRE (fundamental > 0.95f);
+    REQUIRE (midband > 0.9f);
+}
+
 TEST_CASE ("Lo cut removes low-frequency processing", "[sensitivity]")
 {
     sensitivity::Parameters parameters;

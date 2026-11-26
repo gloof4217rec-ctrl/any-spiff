@@ -3,6 +3,7 @@
 #include <PluginEditor.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 namespace
 {
@@ -60,6 +61,17 @@ TEST_CASE ("Editor shows every parameter")
         REQUIRE (slider->isEnabled());
     }
 
+    // The band panel sliders are linear and drive the selected band's frequency,
+    // gain and Q, plus the lo/hi cut frequencies.
+    for (const auto& id : juce::StringArray { "band_freq_slider", "band_gain_slider", "band_q_slider",
+                                              "locut_freq", "hicut_freq" })
+    {
+        auto* slider = dynamic_cast<juce::Slider*> (findChildByName (editor, id));
+        REQUIRE (slider != nullptr);
+        REQUIRE (slider->getSliderStyle() == juce::Slider::LinearHorizontal);
+        REQUIRE (slider->isEnabled());
+    }
+
     // The two choice parameters need their items filled in by the editor.
     for (const auto& id : juce::StringArray { "mode", "stereo_mode" })
     {
@@ -84,14 +96,29 @@ TEST_CASE ("Editor shows every parameter")
     REQUIRE (windowCombo != nullptr);
     REQUIRE (windowCombo->getNumItems() == 3);
 
-    // Two toggles, found by their text rather than by ID.
+    // Band type and the two cut slopes are also four-entry combos.
+    for (const auto& id : juce::StringArray { "band_type_combo", "locut_slope", "hicut_slope" })
+    {
+        auto* combo = dynamic_cast<juce::ComboBox*> (findChildByName (editor, id));
+        REQUIRE (combo != nullptr);
+        REQUIRE (combo->getNumItems() == 4);
+    }
+
+    // Band selector buttons.
+    for (const auto& id : juce::StringArray { "band1_button", "band2_button", "band3_button" })
+    {
+        auto* button = dynamic_cast<juce::TextButton*> (findChildByName (editor, id));
+        REQUIRE (button != nullptr);
+    }
+
+    // Three toggles: delta, bypass and the band enable.
     int numToggles = 0;
 
     for (auto* child : editor.getChildren())
         if (dynamic_cast<juce::ToggleButton*> (child) != nullptr)
             ++numToggles;
 
-    REQUIRE (numToggles == 2);
+    REQUIRE (numToggles == 3);
 
     // The sensitivity graph is present and laid out.
     auto* graph = dynamic_cast<SensitivityCurveComponent*> (findChildByName (editor, "sensitivity_graph"));
@@ -152,6 +179,52 @@ TEST_CASE ("Editor respects its size limits")
     auto& editor = fixture.get();
 
     REQUIRE (editor.getWidth() == 760);
-    REQUIRE (editor.getHeight() == 580);
+    REQUIRE (editor.getHeight() == 680);
     REQUIRE (editor.isResizable());
+}
+
+TEST_CASE ("Band panel edits the selected band's parameters")
+{
+    EditorFixture fixture;
+    auto& editor = fixture.get();
+    auto& processor = fixture.processor;
+
+    auto* freq = dynamic_cast<juce::Slider*> (findChildByName (editor, "band_freq_slider"));
+    auto* q = dynamic_cast<juce::Slider*> (findChildByName (editor, "band_q_slider"));
+    auto* on = dynamic_cast<juce::ToggleButton*> (findChildByName (editor, "band_on_button"));
+    auto* band2 = dynamic_cast<juce::TextButton*> (findChildByName (editor, "band2_button"));
+    auto* band3 = dynamic_cast<juce::TextButton*> (findChildByName (editor, "band3_button"));
+
+    REQUIRE (freq != nullptr);
+    REQUIRE (q != nullptr);
+    REQUIRE (on != nullptr);
+    REQUIRE (band2 != nullptr);
+    REQUIRE (band3 != nullptr);
+
+    // Default: band 1 is selected and its defaults are reflected.
+    REQUIRE (juce::approximatelyEqual (freq->getValue(), 100.0));
+    REQUIRE (q->getValue() == Catch::Approx (0.7).margin (0.01));
+    REQUIRE (on->getToggleState());
+
+    // Selecting band 2 refreshes the panel to band 2's values.
+    band2->onClick();
+    REQUIRE (juce::approximatelyEqual (freq->getValue(), 1000.0));
+
+    // Moving a panel slider edits the selected band's parameter.
+    freq->setValue (1500.0, juce::sendNotificationSync);
+    REQUIRE (juce::approximatelyEqual (processor.apvts.getRawParameterValue ("band2_freq")->load(), 1500.0f));
+
+    q->setValue (2.5, juce::sendNotificationSync);
+    REQUIRE (juce::approximatelyEqual (processor.apvts.getRawParameterValue ("band2_q")->load(), 2.5f));
+
+    // Switching to band 3 leaves band 2 untouched and exposes band 3's values.
+    band3->onClick();
+    REQUIRE (juce::approximatelyEqual (freq->getValue(), 6000.0));
+    REQUIRE (juce::approximatelyEqual (processor.apvts.getRawParameterValue ("band2_freq")->load(), 1500.0f));
+
+    // Toggling "On" disables the selected (band 3) band only.
+    on->setToggleState (false, juce::dontSendNotification);
+    on->onClick();
+    REQUIRE (processor.apvts.getRawParameterValue ("band3_on")->load() < 0.5f);
+    REQUIRE (processor.apvts.getRawParameterValue ("band2_on")->load() > 0.5f);
 }
