@@ -1,8 +1,24 @@
 #include "PluginEditor.h"
+#include "SculptorLookAndFeel.h"
+
+namespace
+{
+    // A single, program-lifetime look and feel shared by every editor instance.
+    // Keeping it alive for the whole process (rather than as an editor member)
+    // means the child components never observe a dangling look-and-feel pointer
+    // while the editor is being torn down.
+    SculptorLookAndFeel& getSculptorLookAndFeel()
+    {
+        static SculptorLookAndFeel lookAndFeel;
+        return lookAndFeel;
+    }
+}
 
 PluginEditor::PluginEditor (PluginProcessor& p)
     : AudioProcessorEditor (&p), processorRef (p), sensitivityGraph (p)
 {
+    setLookAndFeel (&getSculptorLookAndFeel());
+
     addSlider ("depth", "Depth");
     addSlider ("sensitivity", "Sensitivity");
     addSlider ("sharpness", "Sharpness");
@@ -369,7 +385,7 @@ void PluginEditor::paint (juce::Graphics& g)
 
     g.setColour (textColour.withAlpha (0.6f));
     g.setFont (juce::FontOptions (12.0f));
-    g.drawText (juce::String ("v" VERSION "  \xc2\xb7  adaptive transient shaper"),
+    g.drawText (juce::String::fromUTF8 ("v" VERSION "  \xc2\xb7  adaptive transient shaper"),
                 titleArea,
                 juce::Justification::centredRight,
                 true);

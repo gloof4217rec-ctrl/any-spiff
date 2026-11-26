@@ -228,3 +228,20 @@ TEST_CASE ("Band panel edits the selected band's parameters")
     REQUIRE (processor.apvts.getRawParameterValue ("band3_on")->load() < 0.5f);
     REQUIRE (processor.apvts.getRawParameterValue ("band2_on")->load() > 0.5f);
 }
+
+TEST_CASE ("Editor paints with the custom look and feel")
+{
+    EditorFixture fixture;
+    auto& editor = fixture.get();
+
+    // Force a full software paint of the editor and every child, exercising the
+    // custom rotary/linear slider, button, toggle and combo drawing.
+    juce::Image image (juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true);
+    {
+        juce::Graphics g (image);
+        editor.paintEntireComponent (g, false);
+    }
+
+    // The custom look and feel must actually draw something (not a blank image).
+    REQUIRE (image.getPixelAt (image.getWidth() / 2, image.getHeight() / 2).getAlpha() > 0);
+}
