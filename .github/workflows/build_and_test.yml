@@ -262,7 +262,7 @@ jobs:
         uses: actions/download-artifact@v4 # ИСПРАВЛЕНО: v4 вместо v8
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2 # ИСПРАВЛЕНО: v2 вместо v3
+        uses: softprops/action-gh-release@v3 # ИСПРАВЛЕНО: v2 вместо v3
         with:
           prerelease: true
           # download-artifact puts these files in their own dirs...
